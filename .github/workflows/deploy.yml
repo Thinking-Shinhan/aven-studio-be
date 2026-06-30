@@ -3,14 +3,14 @@ name: Deploy Spring Boot to GCP VM
 on:
   push:
     branches:
-      - main
+      - develop
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
+      - name: Checkout sourGIGce code
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
