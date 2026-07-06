@@ -1,0 +1,42 @@
+package kr.co.daeun.avenstudiobe.domain.product.repository;
+
+import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface ProductRepository extends JpaRepository<Product, Long> {
+    @Query("""
+    SELECT p
+    FROM Product p
+    WHERE p.category IN :categories
+      AND (:color IS NULL OR p.color = :color)
+      AND (:gender IS NULL OR p.gender = :gender)
+      AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
+    ORDER BY p.createdAt DESC
+""")
+    List<Product> searchProductsWithCategory(
+            @Param("categories") List<String> categories,
+            @Param("color") String color,
+            @Param("gender") String gender,
+            @Param("keywordPattern") String keywordPattern
+    );
+
+    @Query("""
+    SELECT p
+    FROM Product p
+    WHERE (:color IS NULL OR p.color = :color)
+      AND (:gender IS NULL OR p.gender = :gender)
+      AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
+    ORDER BY p.createdAt DESC
+""")
+    List<Product> searchProductsWithoutCategory(
+            @Param("color") String color,
+            @Param("gender") String gender,
+            @Param("keywordPattern") String keywordPattern
+    );
+}
