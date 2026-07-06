@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout sourGIGce code
+      - name: Checkout source code
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -23,7 +23,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Spring Boot jar
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean bootJar -x test
+
+      - name: Prepare deploy jar
+        run: |
+          mkdir -p deploy
+          cp $(ls build/libs/*.jar | grep -v plain | head -n 1) deploy/app.jar
+          jar tf deploy/app.jar | grep "BOOT-INF/classes/kr/co/daeun/avenstudiobe/global/config/SecurityConfig.class"
 
       - name: Copy jar to VM
         uses: appleboy/scp-action@v0.1.7
@@ -31,9 +37,9 @@ jobs:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USER }}
           key: ${{ secrets.GCP_SSH_KEY }}
-          source: "build/libs/*.jar"
+          source: "deploy/app.jar"
           target: "/tmp/aven-studio"
-          strip_components: 2
+          strip_components: 1
           overwrite: true
 
       - name: Restart Spring Boot service
@@ -44,6 +50,6 @@ jobs:
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
             sudo mkdir -p /opt/aven-studio
-            sudo cp /tmp/aven-studio/build/libs/*.jar /opt/aven-studio/app.jar
+            sudo cp /tmp/aven-studio/app.jar /opt/aven-studio/app.jar
             sudo systemctl restart aven-studio
             sudo systemctl status aven-studio --no-pager
