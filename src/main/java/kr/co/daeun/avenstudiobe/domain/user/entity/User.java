@@ -1,4 +1,4 @@
-package kr.co.daeun.avenstudiobe.domain.users.entity;
+package kr.co.daeun.avenstudiobe.domain.user.entity;
 
 import jakarta.persistence.*;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Table(name = "users")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Users {
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,7 +40,7 @@ public class Users {
     private Brand brand;
 
     @Builder
-    public Users(Long id, String loginId, String name, String password, LocalDateTime createdAt, Brand brand) {
+    public User(Long id, String loginId, String name, String password, LocalDateTime createdAt, Brand brand) {
         this.id = id;
         this.loginId = loginId;
         this.name = name;
