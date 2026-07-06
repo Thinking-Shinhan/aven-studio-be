@@ -1,4 +1,4 @@
-package kr.co.daeun.avenstudiobe.domain.users.dto;
+package kr.co.daeun.avenstudiobe.domain.user.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
