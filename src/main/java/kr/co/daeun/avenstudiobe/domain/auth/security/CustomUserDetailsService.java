@@ -1,7 +1,7 @@
 package kr.co.daeun.avenstudiobe.domain.auth.security;
 
-import kr.co.daeun.avenstudiobe.domain.users.entity.Users;
-import kr.co.daeun.avenstudiobe.domain.users.repository.UsersRepository;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
+import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -16,7 +16,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String loginId) throws UsernameNotFoundException {
-        Users user = usersRepository.findByLoginId(loginId)
+        User user = usersRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new UsernameNotFoundException("유저 없음"));
 
         return org.springframework.security.core.userdetails.User.builder()

@@ -1,11 +1,11 @@
-package kr.co.daeun.avenstudiobe.domain.users.service;
+package kr.co.daeun.avenstudiobe.domain.user.service;
 
-import kr.co.daeun.avenstudiobe.domain.users.dto.RegisterReqDto;
-import kr.co.daeun.avenstudiobe.domain.users.dto.RegisterRespDto;
+import kr.co.daeun.avenstudiobe.domain.user.dto.RegisterReqDto;
+import kr.co.daeun.avenstudiobe.domain.user.dto.RegisterRespDto;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
-import kr.co.daeun.avenstudiobe.domain.users.entity.Users;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
-import kr.co.daeun.avenstudiobe.domain.users.repository.UsersRepository;
+import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.global.exception.DuplicateUserIdException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,14 +38,14 @@ public class UsersService {
                                 .build()
                 ));
 
-        Users user = Users.builder()
+        User user = User.builder()
                 .loginId(dto.getLoginId())
                 .name(dto.getName())
                 .password(passwordEncoder.encode(dto.getPassword()))
                 .brand(brand)
                 .build();
 
-        Users saved = usersRepository.save(user);
+        User saved = usersRepository.save(user);
 
         return new RegisterRespDto(
                 saved.getId(),

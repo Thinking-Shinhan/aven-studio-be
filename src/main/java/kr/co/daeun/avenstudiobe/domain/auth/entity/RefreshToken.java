@@ -1,7 +1,7 @@
 package kr.co.daeun.avenstudiobe.domain.auth.entity;
 
 import jakarta.persistence.*;
-import kr.co.daeun.avenstudiobe.domain.users.entity.Users;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(name = "refresh_tokens")
 public class RefreshToken {
 
     @Id
@@ -20,7 +21,7 @@ public class RefreshToken {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false, unique = true)
-    private Users user;
+    private User user;
 
     @Column(nullable = false, length = 500)
     private String token;
@@ -28,7 +29,7 @@ public class RefreshToken {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
-    public RefreshToken(Users user, String token, LocalDateTime expiresAt) {
+    public RefreshToken(User user, String token, LocalDateTime expiresAt) {
         this.user = user;
         this.token = token;
         this.expiresAt = expiresAt;
