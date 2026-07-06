@@ -4,10 +4,10 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import kr.co.daeun.avenstudiobe.domain.auth.dto.LoginReqDto;
 import kr.co.daeun.avenstudiobe.domain.auth.dto.TokenDto;
-import kr.co.daeun.avenstudiobe.domain.users.entity.Users;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.auth.entity.RefreshToken;
 import kr.co.daeun.avenstudiobe.domain.auth.repository.RefreshTokenRepository;
-import kr.co.daeun.avenstudiobe.domain.users.repository.UsersRepository;
+import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.domain.auth.security.JwtUtil;
 import kr.co.daeun.avenstudiobe.global.exception.ExpiredRefreshTokenException;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidLoginException;
@@ -31,7 +31,7 @@ public class AuthService {
 
     @Transactional
     public TokenDto login(LoginReqDto dto) {
-        Users user = usersRepository.findByLoginId(dto.getLoginId())
+        User user = usersRepository.findByLoginId(dto.getLoginId())
                 .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 틀렸습니다."));
 
         if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
