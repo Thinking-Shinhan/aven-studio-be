@@ -1,6 +1,8 @@
 package kr.co.daeun.avenstudiobe.domain.product.repository;
 
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,13 +19,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
       AND (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
-    ORDER BY p.createdAt DESC
 """)
-    List<Product> searchProductsWithCategory(
+    Page<Product> searchProductsWithCategory(
             @Param("categories") List<String> categories,
             @Param("color") String color,
             @Param("gender") String gender,
-            @Param("keywordPattern") String keywordPattern
+            @Param("keywordPattern") String keywordPattern,
+            Pageable pageable
     );
 
     @Query("""
@@ -32,11 +34,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     WHERE (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
-    ORDER BY p.createdAt DESC
 """)
-    List<Product> searchProductsWithoutCategory(
+    Page<Product> searchProductsWithoutCategory(
             @Param("color") String color,
             @Param("gender") String gender,
-            @Param("keywordPattern") String keywordPattern
+            @Param("keywordPattern") String keywordPattern,
+            Pageable pageable
     );
 }

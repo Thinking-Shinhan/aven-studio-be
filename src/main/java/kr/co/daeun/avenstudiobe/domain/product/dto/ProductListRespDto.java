@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.product.dto;
 
+import kr.co.daeun.avenstudiobe.global.common.dto.PageRespDto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -12,5 +13,5 @@ public class ProductListRespDto {
     private String color;
     private String gender;
     private String keyword;
-    private List<ProductRespDto> products;
+    private PageRespDto<ProductRespDto> products;
 }

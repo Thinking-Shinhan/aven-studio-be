@@ -4,6 +4,9 @@ import kr.co.daeun.avenstudiobe.domain.product.dto.ProductListRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.dto.ProductRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,9 +27,12 @@ public class ProductController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String color,
             @RequestParam(required = false) String gender,
-            @RequestParam(required = false) String keyword){
+            @RequestParam(required = false) String keyword,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable
+            ){
 
-        ProductListRespDto products = productService.getProductList(category, color, gender, keyword);
+        ProductListRespDto products = productService.getProductList(category, color, gender, keyword, pageable);
 
         return ResponseEntity.ok().body(products);
     }
