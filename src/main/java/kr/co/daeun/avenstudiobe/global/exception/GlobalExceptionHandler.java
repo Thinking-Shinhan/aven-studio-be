@@ -91,6 +91,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(SheetAccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleSheetAccessDenied(SheetAccessDeniedException e) {
+        log.error("스프레드시트 접근 권한 에러", e);
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("FORBIDDEN", "스프레드시트에 접근할 수 없습니다. 공유 권한을 확인해주세요."));
