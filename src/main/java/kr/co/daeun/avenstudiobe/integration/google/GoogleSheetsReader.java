@@ -39,7 +39,7 @@ public class GoogleSheetsReader {
                 throw new SheetReadException(e);
             }
             if (statusCode == 403) {
-                throw new SheetAccessDeniedException();
+                throw new SheetAccessDeniedException(e);
             }
             throw new SheetReadException(e);
         } catch (IOException e) {
