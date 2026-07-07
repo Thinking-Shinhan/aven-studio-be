@@ -81,4 +81,54 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
     }
+
+    @ExceptionHandler(InvalidSheetUrlException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidSheetUrl(InvalidSheetUrlException e) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
+    }
+
+    @ExceptionHandler(SheetAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleSheetAccessDenied(SheetAccessDeniedException e) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("FORBIDDEN", "스프레드시트에 접근할 수 없습니다. 공유 권한을 확인해주세요."));
+    }
+
+    @ExceptionHandler(SheetReadException.class)
+    public ResponseEntity<ErrorResponse> handleSheetRead(SheetReadException e) {
+        log.error("스프레드시트 읽기 실패", e);
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.of("INTERNAL_SERVER_ERROR", "스프레드시트 상품 동기화 중 오류가 발생했습니다."));
+    }
+
+    @ExceptionHandler(SheetConnectionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSheetConnectionNotFound(SheetConnectionNotFoundException e) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(SheetSyncInProgressException.class)
+    public ResponseEntity<ErrorResponse> handleSheetSyncInProgress(SheetSyncInProgressException e) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CONFLICT", e.getMessage()));
+    }
+
+    @ExceptionHandler(BrandNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleBrandNotFound(BrandNotFoundException e) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(SheetAlreadyConnectedException.class)
+    public ResponseEntity<ErrorResponse> handleSheetAlreadyConnected(SheetAlreadyConnectedException e) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CONFLICT", e.getMessage()));
+    }
 }

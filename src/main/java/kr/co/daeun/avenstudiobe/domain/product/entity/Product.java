@@ -56,4 +56,42 @@ public class Product {
     @JoinColumn(name = "brand_id")
     private Brand brand;
 
+    public static Product create(
+            Brand brand,
+            String code,
+            String name,
+            String category,
+            String gender,
+            String color,
+            int price,
+            String fitDescription,
+            String description,
+            String fabricationDescription
+    ) {
+        Product product = new Product();
+        product.brand = brand;
+        product.code = code;
+        product.update(name, category, gender, color, price, fitDescription, description, fabricationDescription);
+        return product;
+    }
+
+    public void update(
+            String name,
+            String category,
+            String gender,
+            String color,
+            int price,
+            String fitDescription,
+            String description,
+            String fabricationDescription
+    ) {
+        this.name = name;
+        this.category = category;
+        this.gender = gender;
+        this.color = color;
+        this.price = price;
+        this.fitDescription = fitDescription;
+        this.description = description;
+        this.fabricationDescription = fabricationDescription;
+    }
 }
