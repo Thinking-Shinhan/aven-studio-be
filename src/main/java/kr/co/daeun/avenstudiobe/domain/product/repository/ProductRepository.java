@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.product.repository;
 
+import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -41,4 +42,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
             @Param("keywordPattern") String keywordPattern,
             Pageable pageable
     );
+
+    Product findProductByBrandAndCode(Brand brand, String code);
 }

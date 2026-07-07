@@ -8,6 +8,8 @@ import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
 import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.global.exception.DuplicateUserIdException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,4 +57,9 @@ public class UsersService {
                 saved.getBrand().getName()
         );
     }
+    public User findByLoginId(String loginId) {
+        return usersRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new UsernameNotFoundException("유저 없음"));
+    }
+
 }
