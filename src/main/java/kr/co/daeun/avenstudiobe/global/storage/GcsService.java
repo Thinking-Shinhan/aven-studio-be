@@ -4,6 +4,7 @@ import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GcsService {
 
     @Value("${gcp.storage.bucket}")
@@ -75,11 +77,21 @@ public class GcsService {
         }
 
         String contentType = file.getContentType();
+        String filename = file.getOriginalFilename();
 
-        if (contentType == null ||
-                !(contentType.equals("image/jpeg")
+        boolean validContentType = contentType != null &&
+                (contentType.equals("image/jpeg")
                         || contentType.equals("image/png")
-                        || contentType.equals("image/webp"))) {
+                        || contentType.equals("image/webp")
+                        || contentType.equals("image/x-png"));
+
+        boolean validExtension = filename != null &&
+                (filename.toLowerCase().endsWith(".jpg")
+                        || filename.toLowerCase().endsWith(".jpeg")
+                        || filename.toLowerCase().endsWith(".png")
+                        || filename.toLowerCase().endsWith(".webp"));
+
+        if (!validContentType && !validExtension) {
             throw new IllegalArgumentException("jpg, png, webp 이미지만 업로드할 수 있습니다.");
         }
     }
