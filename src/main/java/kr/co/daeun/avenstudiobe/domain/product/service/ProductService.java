@@ -4,9 +4,12 @@ import kr.co.daeun.avenstudiobe.domain.product.dto.ProductListRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.dto.ProductRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.global.common.dto.PageRespDto;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidCategoryException;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidGenderException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,7 +24,8 @@ public class ProductService {
             String category,
             String color,
             String gender,
-            String keyword
+            String keyword,
+            Pageable pageable
     ) {
         List<String> searchCategories = resolveSearchCategories(category);
 
@@ -36,33 +40,33 @@ public class ProductService {
             keywordPattern = "%" + normalizedKeyword + "%";
         }
 
-        List<Product> productList;
+        Page<Product> productPage;
 
         if (searchCategories == null) {
-            productList = productRepository.searchProductsWithoutCategory(
+            productPage = productRepository.searchProductsWithoutCategory(
                     normalizedColor,
                     normalizedGender,
-                    keywordPattern
+                    keywordPattern,
+                    pageable
             );
         } else {
-            productList = productRepository.searchProductsWithCategory(
+            productPage = productRepository.searchProductsWithCategory(
                     searchCategories,
                     normalizedColor,
                     normalizedGender,
-                    keywordPattern
+                    keywordPattern,
+                    pageable
             );
         }
 
-        List<ProductRespDto> products = productList.stream()
-                .map(ProductRespDto::from)
-                .toList();
+        Page<ProductRespDto> productRespPage = productPage.map(ProductRespDto::from);
 
         return new ProductListRespDto(
                 category,
                 normalizedColor,
                 normalizedGender,
                 normalizedKeyword,
-                products
+                PageRespDto.from(productRespPage)
         );
     }
 
