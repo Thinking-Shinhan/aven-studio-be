@@ -29,7 +29,6 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
-    private final ObjectMapper objectMapper;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -55,8 +54,14 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpStatus.UNAUTHORIZED.value());
                             response.setContentType("application/json;charset=UTF-8");
-                            objectMapper.writeValue(response.getWriter(),
-                                    ErrorResponse.of("UNAUTHORIZED", "로그인이 필요합니다."));
+                            response.getWriter().write("""
+                                    {
+                                      "error": {
+                                        "code": "UNAUTHORIZED",
+                                        "message": "로그인이 필요합니다."
+                                      }
+                                    }
+                                    """);
                         })
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
