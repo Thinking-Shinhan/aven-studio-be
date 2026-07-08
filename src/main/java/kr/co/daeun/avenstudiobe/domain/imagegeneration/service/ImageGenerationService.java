@@ -4,6 +4,8 @@ import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
+import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
+import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobCreateReqDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationResultRespDto;
@@ -36,6 +38,7 @@ public class ImageGenerationService {
     private final ImageGenerationResultRepository resultRepository;
     private final ProductRepository productRepository;
     private final BrandRepository brandRepository;
+    private final BrandMoodRepository brandMoodRepository;
     private final UsersRepository usersRepository;
     private final AssetService assetService;
     private final GcsService gcsService;
@@ -53,15 +56,17 @@ public class ImageGenerationService {
                 .orElseThrow(() -> new IllegalArgumentException("브랜드를 찾을 수 없습니다."));
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+        BrandMood brandMood = findBrandMood(request.getBrandMoodId(), brand.getId());
+        String compiledPrompt = compilePrompt(brandMood, request.getPrompt());
 
-        ImageGenerationJob job = savePendingJob(request, user, brand, product);
+        ImageGenerationJob job = savePendingJob(request, user, brand, product, compiledPrompt);
         long startedAt = System.currentTimeMillis();
 
         try {
             markProcessing(job.getId());
 
             List<GoogleAiImageProvider.GeneratedImage> generatedImages = generateImages(
-                    request.getPrompt(),
+                    compiledPrompt,
                     request.getRequestedCount()
             );
 
@@ -70,7 +75,7 @@ public class ImageGenerationService {
                         job.getId(),
                         product.getId(),
                         generatedImages,
-                        request.getPrompt(),
+                        compiledPrompt,
                         startedAt
                 );
 
@@ -106,7 +111,8 @@ public class ImageGenerationService {
             ImageGenerationJobCreateReqDto request,
             User user,
             Brand brand,
-            Product product
+            Product product,
+            String compiledPrompt
     ) {
         ImageGenerationJob job = ImageGenerationJob.create(
                 brand,
@@ -115,7 +121,7 @@ public class ImageGenerationService {
                 user,
                 request.getCutType(),
                 normalizeGenerationMode(request.getGenerationMode()),
-                request.getPrompt(),
+                compiledPrompt,
                 request.getNegativePrompt(),
                 normalizeJson(request.getUserOptionsJson()),
                 normalizeJson(request.getReferenceJson()),
@@ -223,6 +229,39 @@ public class ImageGenerationService {
             }
             throw e;
         }
+    }
+
+    private BrandMood findBrandMood(Long brandMoodId, Long brandId) {
+        BrandMood brandMood = brandMoodRepository.findById(brandMoodId)
+                .orElseThrow(() -> new IllegalArgumentException("브랜드 무드를 찾을 수 없습니다."));
+
+        if (!brandMood.getBrand().getId().equals(brandId)) {
+            throw new IllegalArgumentException("브랜드에 속한 무드가 아닙니다.");
+        }
+
+        if (!Boolean.TRUE.equals(brandMood.getActive())) {
+            throw new IllegalArgumentException("활성화된 브랜드 무드가 아닙니다.");
+        }
+
+        return brandMood;
+    }
+
+    private String compilePrompt(BrandMood brandMood, String userPrompt) {
+        String brandInstruction = brandMood.getBrandInstruction();
+        if (brandInstruction == null || brandInstruction.isBlank()) {
+            throw new IllegalArgumentException("브랜드 무드 지시문이 비어 있습니다.");
+        }
+
+        return """
+                [BRAND INSTRUCTION]
+                %s
+
+                [IMAGE GENERATION REQUEST]
+                %s
+                """.formatted(
+                brandInstruction.trim(),
+                userPrompt.trim()
+        );
     }
 
     private ImageGenerationJobRespDto toResponse(Long jobId, List<ImageGenerationResult> results) {
