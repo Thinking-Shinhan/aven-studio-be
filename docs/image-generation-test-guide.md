@@ -97,7 +97,7 @@ Cookie: accessToken={accessToken}
   "prompt": "프리미엄 패션 이커머스 모델컷을 생성한다. 상품의 색상과 형태를 유지한다. 최종 결과에는 한 명의 모델만 등장해야 하며 텍스트, 워터마크, 콜라주를 만들지 않는다.",
   "negativePrompt": "cheap ecommerce, neon, watermark, text overlay, collage",
   "userOptionsJson": "{\"colorTemperature\":\"cool\",\"cameraAngle\":\"eye_level_front\",\"framing\":\"full_body\"}",
-  "referenceJson": "{}",
+  "referenceJson": "{\"productImages\":[1,2],\"modelImage\":3,\"poseImage\":4,\"backgroundImage\":5}",
   "requestedCount": 4
 }
 ```
@@ -114,8 +114,30 @@ Cookie: accessToken={accessToken}
 | `prompt` | O | 사용자 또는 샷 템플릿 기반 이미지 생성 요청 프롬프트 |
 | `negativePrompt` | X | 금지 프롬프트 기록용 |
 | `userOptionsJson` | X | 사용자 선택 옵션 JSON 문자열 |
-| `referenceJson` | X | 참조 이미지 정보 JSON 문자열 |
+| `referenceJson` | X | 참조 이미지 assetId 정보 JSON 문자열. `productImages`, `modelImage`, `poseImage`, `backgroundImage` 지원 |
 | `requestedCount` | X | 생성 요청 수. 현재 테스트 단계에서는 1~4 |
+
+### referenceJson 구조
+
+`referenceJson`은 문자열 필드이므로 JSON을 문자열로 넣는다.
+
+```json
+{
+  "productImages": [1, 2],
+  "modelImage": 3,
+  "poseImage": 4,
+  "backgroundImage": 5
+}
+```
+
+각 값은 `assets.id`다.
+
+- `productImages`: 상품 정확도 기준 이미지. 배열 또는 단일 숫자 가능
+- `modelImage`: 모델 정체성 기준 이미지
+- `poseImage`: 포즈와 카메라 구도 기준 이미지
+- `backgroundImage`: 배경 무드 기준 이미지
+
+서버는 각 asset의 `object_name`으로 GCS 이미지를 읽고, Google AI 요청에 이미지 input으로 함께 전달한다.
 
 ### Expected 201 Response
 
@@ -345,5 +367,5 @@ Content-Type: application/json
 
 | 기능명 | Method | Endpoint | 설명 |
 |---|---:|---|---|
-| 이미지 생성 요청 | POST | `/image-generation/jobs` | 브랜드 무드 지시문을 프롬프트에 자동 반영한 뒤 Google AI 이미지 생성 요청, GCS 자동 저장, assets 자동 저장 |
+| 이미지 생성 요청 | POST | `/image-generation/jobs` | 브랜드 무드 지시문과 참조 이미지 역할 규칙을 프롬프트에 자동 반영한 뒤 Google AI 이미지 생성 요청, GCS 자동 저장, assets 자동 저장 |
 | 이미지 생성 결과 조회 | GET | `/image-generation/jobs/{jobId}` | 생성 Job 상태와 결과 이미지 signed URL 조회 |
