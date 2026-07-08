@@ -264,8 +264,8 @@ public class ImageGenerationService {
     }
 
     private void validateRequestedCount(int requestedCount) {
-        if (requestedCount < 1 || requestedCount > 2) {
-            throw new IllegalArgumentException("테스트 단계에서는 최대 2장까지만 생성할 수 있습니다.");
+        if (requestedCount < 1 || requestedCount > 4) {
+            throw new IllegalArgumentException("테스트 단계에서는 최대 4장까지만 생성할 수 있습니다.");
         }
     }
 

@@ -33,6 +33,6 @@ public class ImageGenerationJobCreateReqDto {
     private String referenceJson = "{}";
 
     @Min(1)
-    @Max(2)
+    @Max(4)
     private int requestedCount = 2;
 }
