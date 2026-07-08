@@ -53,6 +53,22 @@ public class BrandMoodService {
         return parseAnalysisResponse(request, claudeText, "PDF");
     }
 
+    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, String requestJson, MultipartFile file, User user) {
+        return analyzePdf(brandId, parseAnalyzeRequest(requestJson), file, user);
+    }
+
+    private BrandMoodAnalyzeReqDto parseAnalyzeRequest(String requestJson) {
+        if (requestJson == null || requestJson.isBlank()) {
+            throw new IllegalArgumentException("request JSON을 입력해주세요.");
+        }
+
+        try {
+            return objectMapper.readValue(requestJson, BrandMoodAnalyzeReqDto.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("request JSON 형식이 올바르지 않습니다.", e);
+        }
+    }
+
     private BrandMoodAnalysisRespDto parseAnalysisResponse(
             BrandMoodAnalyzeReqDto request,
             String claudeText,
