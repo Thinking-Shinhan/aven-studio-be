@@ -4,8 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
 @RestControllerAdvice
@@ -35,6 +37,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .badRequest()
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRequestParameter(MissingServletRequestParameterException e) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of("BAD_REQUEST", getRequestParameterMessage(e.getParameterName())));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of("BAD_REQUEST", getRequestParameterMessage(e.getName())));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -134,10 +150,25 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
     }
 
+    @ExceptionHandler(ProductNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProductNotFound(ProductNotFoundException e) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
+    }
+
     @ExceptionHandler(SheetAlreadyConnectedException.class)
     public ResponseEntity<ErrorResponse> handleSheetAlreadyConnected(SheetAlreadyConnectedException e) {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("CONFLICT", e.getMessage()));
+    }
+
+    private String getRequestParameterMessage(String parameterName) {
+        if ("productId".equals(parameterName)) {
+            return "상품 ID 형식이 올바르지 않습니다.";
+        }
+
+        return "요청 파라미터 형식이 올바르지 않습니다.";
     }
 }

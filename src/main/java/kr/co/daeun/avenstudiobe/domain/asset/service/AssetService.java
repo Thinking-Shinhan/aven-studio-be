@@ -2,6 +2,7 @@ package kr.co.daeun.avenstudiobe.domain.asset.service;
 
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AssetInitRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import lombok.RequiredArgsConstructor;
@@ -130,7 +131,7 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public List<AssetImageResult> getProductImages(Long productId) {
-        List<Asset> assets = assetRepository.findByProductId(productId);
+        List<Asset> assets = assetRepository.findByProductIdOrderByIdDesc(productId);
 
         return assets.stream()
                 .map(asset -> new AssetImageResult(
@@ -139,6 +140,19 @@ public class AssetService {
                         asset.getOriginalFilename(),
                         asset.getContentType(),
                         asset.getSize()
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AssetInitRespDto> getInitAssets(Long productId) {
+        List<Asset> assets = assetRepository.findByProductIdOrderByIdDesc(productId);
+
+        return assets.stream()
+                .map(asset -> new AssetInitRespDto(
+                        asset.getId(),
+                        gcsService.generateSignedUrl(asset.getObjectName()),
+                        asset.getCreatedAt()
                 ))
                 .toList();
     }
