@@ -45,7 +45,7 @@ public class BrandMoodController {
     @Operation(summary = "PDF 기반 브랜드 무드 분석", description = "브랜드 PDF 자료를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
     public ResponseEntity<BrandMoodAnalysisRespDto> analyzePdf(
             @PathVariable Long brandId,
-            @Valid @RequestPart("request") BrandMoodAnalyzeReqDto request,
+            @RequestParam("request") String request,
             @RequestPart("file") MultipartFile file,
             Authentication authentication
     ) {
