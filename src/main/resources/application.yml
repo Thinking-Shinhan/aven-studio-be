@@ -38,4 +38,9 @@ sheet:
     fixed-delay-ms: 3600000
 google:
   sheets:
-    enabled: true
+    enabled: ${GOOGLE_SHEETS_ENABLED:false}
+  ai:
+    api-key: ${GOOGLE_AI_API_KEY:}
+    image-model: ${GOOGLE_AI_IMAGE_MODEL:gemini-2.5-flash-image}
+image-generation:
+  gcs-save-enabled: ${IMAGE_GENERATION_GCS_SAVE_ENABLED:true}

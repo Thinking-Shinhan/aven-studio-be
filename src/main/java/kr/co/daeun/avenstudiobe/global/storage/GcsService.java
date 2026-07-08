@@ -46,6 +46,25 @@ public class GcsService {
         }
     }
 
+    public UploadedFile uploadGeneratedImage(byte[] bytes, String contentType, Long productId, Long jobId) {
+        validateGeneratedImage(bytes, contentType);
+
+        String normalizedContentType = normalizeContentType(contentType);
+        String extension = getExtensionByContentType(normalizedContentType);
+        String objectName = "generated/" + productId + "/" + jobId + "/" + UUID.randomUUID() + extension;
+
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+                .setContentType(normalizedContentType)
+                .build();
+
+        storage.create(blobInfo, bytes);
+
+        String fileUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectName;
+        String originalFilename = "generated-" + jobId + extension;
+
+        return new UploadedFile(fileUrl, objectName, originalFilename, normalizedContentType, bytes.length);
+    }
+
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) {
             return "";
@@ -94,6 +113,42 @@ public class GcsService {
         if (!validContentType && !validExtension) {
             throw new IllegalArgumentException("jpg, png, webp 이미지만 업로드할 수 있습니다.");
         }
+    }
+
+    private void validateGeneratedImage(byte[] bytes, String contentType) {
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("생성 이미지 데이터가 비어 있습니다.");
+        }
+
+        normalizeContentType(contentType);
+    }
+
+    private String normalizeContentType(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return "image/png";
+        }
+
+        if (contentType.equals("image/png") || contentType.equals("image/x-png")) {
+            return "image/png";
+        }
+
+        if (contentType.equals("image/jpeg") || contentType.equals("image/jpg")) {
+            return "image/jpeg";
+        }
+
+        if (contentType.equals("image/webp")) {
+            return "image/webp";
+        }
+
+        throw new IllegalArgumentException("jpg, png, webp 이미지만 저장할 수 있습니다.");
+    }
+
+    private String getExtensionByContentType(String contentType) {
+        return switch (contentType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/webp" -> ".webp";
+            default -> ".png";
+        };
     }
 
     public void delete(String objectName) {
