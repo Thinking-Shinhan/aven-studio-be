@@ -64,8 +64,8 @@ public class SheetSyncService {
         return SheetConnectionRespDto.from(synced);
     }
 
-    // 최초 연동/스케줄 동기화가 공용으로 쓰는 진입점이라 @Transactional을 걸지 않는다.
-    // 아래에서 어떤 예외가 나든 markFailed까지는 반드시 커밋되어야 하기 때문.
+    // 최초 연동/스케줄 동기화가 공용으로 쓰는 진입점이라 @Transactional을 걸지 않는다
+    // 아래에서 예외가 나도 markFailed까지는 커밋되어야 하기 때문
     public void sync(Long connectionId) {
         if (sheetConnectionRepository.tryMarkInProgress(connectionId) == 0) {
             throw new SheetSyncInProgressException();
@@ -84,8 +84,6 @@ public class SheetSyncService {
                 sheetConnection.markSuccess(outcome.describe());
             }
         } catch (SheetAccessDeniedException | SheetReadException e) {
-            // 구글 시트 자체에 접근할 수 없는 치명적 오류는 상태를 기록한 뒤 그대로 호출자에게 전파한다.
-            // connect()로 호출된 경우 GlobalExceptionHandler가 403/404/502를 그대로 응답할 수 있게 하기 위함.
             sheetConnection.markFailed(e.getMessage());
             throw e;
         } catch (Exception e) {
@@ -96,8 +94,6 @@ public class SheetSyncService {
         }
     }
 
-    // 브랜드당 시트 연동은 1개만 허용한다. 단, 이전 시도가 FAILED로 끝난 경우는
-    // 실제로는 연동에 실패한 것이므로 재시도를 막지 않고 그 자리에서 재연동을 허용한다.
     @Transactional
     public SheetConnection saveConnection(Brand brand, String url, String spreadsheetId) {
         Optional<SheetConnection> existing = sheetConnectionRepository.findByBrandId(brand.getId());
@@ -114,8 +110,6 @@ public class SheetSyncService {
         try {
             return sheetConnectionRepository.save(SheetConnection.create(brand, url, spreadsheetId));
         } catch (DataIntegrityViolationException e) {
-            // 동시에 같은 브랜드로 연동 요청이 들어와 brand_id 유니크 제약에 걸린 경우.
-            // 500으로 새지 않도록 명세상의 409로 변환한다.
             throw new SheetAlreadyConnectedException();
         }
     }
