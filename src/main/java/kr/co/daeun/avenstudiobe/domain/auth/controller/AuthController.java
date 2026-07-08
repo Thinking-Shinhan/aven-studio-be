@@ -34,6 +34,7 @@ import java.util.Arrays;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(name = "Auth", description = "인증 및 회원가입 API")
 public class AuthController {
 
     private final UsersService usersService;
@@ -46,11 +47,12 @@ public class AuthController {
     private long refreshExpiration;
 
     @PostMapping("/register")
+    @Operation(summary = "회원가입", description = "사용자 계정을 생성하고, 브랜드가 없으면 함께 생성합니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "User registered successfully"),
+            @ApiResponse(responseCode = "201", description = "회원가입 성공"),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Invalid request or duplicate login ID",
+                    description = "잘못된 요청 또는 중복된 로그인 ID",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
@@ -60,11 +62,12 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "로그인", description = "사용자를 인증하고 accessToken과 refreshToken을 HttpOnly 쿠키로 설정합니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Login successful. Tokens are returned as Set-Cookie headers."),
+            @ApiResponse(responseCode = "200", description = "로그인 성공. 토큰은 Set-Cookie 헤더로 반환됩니다."),
             @ApiResponse(
                     responseCode = "401",
-                    description = "Invalid login credentials",
+                    description = "로그인 정보가 올바르지 않음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
@@ -95,11 +98,12 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
+    @Operation(summary = "Access Token 재발급", description = "refreshToken 쿠키를 사용해 새로운 accessToken 쿠키를 발급합니다.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Access token refreshed successfully"),
+            @ApiResponse(responseCode = "200", description = "Access Token 재발급 성공"),
             @ApiResponse(
                     responseCode = "401",
-                    description = "Missing, invalid, or expired refresh token",
+                    description = "refreshToken이 없거나 유효하지 않거나 만료됨",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
@@ -131,7 +135,8 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    @ApiResponse(responseCode = "200", description = "Logout successful")
+    @Operation(summary = "로그아웃", description = "저장된 refreshToken을 삭제하고 인증 쿠키를 비웁니다.")
+    @ApiResponse(responseCode = "200", description = "로그아웃 성공")
     public ResponseEntity<Void> logout(HttpServletRequest request,
                                         HttpServletResponse response) {
         authService.logout(request);
