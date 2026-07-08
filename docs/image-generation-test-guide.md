@@ -98,7 +98,7 @@ Cookie: accessToken={accessToken}
   "negativePrompt": "cheap ecommerce, neon, watermark, text overlay, collage",
   "userOptionsJson": "{\"colorTemperature\":\"cool\",\"cameraAngle\":\"eye_level_front\",\"framing\":\"full_body\"}",
   "referenceJson": "{}",
-  "requestedCount": 2
+  "requestedCount": 4
 }
 ```
 
@@ -115,7 +115,7 @@ Cookie: accessToken={accessToken}
 | `negativePrompt` | X | 금지 프롬프트 기록용 |
 | `userOptionsJson` | X | 사용자 선택 옵션 JSON 문자열 |
 | `referenceJson` | X | 참조 이미지 정보 JSON 문자열 |
-| `requestedCount` | X | 생성 요청 수. 현재 테스트 단계에서는 1~2 |
+| `requestedCount` | X | 생성 요청 수. 현재 테스트 단계에서는 1~4 |
 
 ### Expected 201 Response
 
@@ -126,8 +126,8 @@ Cookie: accessToken={accessToken}
   "cutType": "MODEL_CUT",
   "generationMode": "PARALLEL",
   "aiName": "gemini-2.5-flash-image",
-  "requestedCount": 2,
-  "outputCount": 2,
+  "requestedCount": 4,
+  "outputCount": 4,
   "latencyMs": 12000,
   "errorMessage": null,
   "results": [
@@ -142,6 +142,20 @@ Cookie: accessToken={accessToken}
       "resultId": 2,
       "assetId": 11,
       "outputIndex": 1,
+      "status": "GENERATED",
+      "imageUrl": "https://storage.googleapis.com/..."
+    },
+    {
+      "resultId": 3,
+      "assetId": 12,
+      "outputIndex": 2,
+      "status": "GENERATED",
+      "imageUrl": "https://storage.googleapis.com/..."
+    },
+    {
+      "resultId": 4,
+      "assetId": 13,
+      "outputIndex": 3,
       "status": "GENERATED",
       "imageUrl": "https://storage.googleapis.com/..."
     }
@@ -269,7 +283,7 @@ Content-Type: application/json
 
 - `401 Unauthorized`
 
-### requestedCount 3 요청
+### requestedCount 5 요청
 
 ```json
 {
@@ -278,14 +292,14 @@ Content-Type: application/json
   "brandMoodId": 1,
   "cutType": "MODEL_CUT",
   "prompt": "test",
-  "requestedCount": 3
+  "requestedCount": 5
 }
 ```
 
 기대값:
 
 - `400 Bad Request`
-- 현재 테스트 단계에서는 최대 2장까지만 허용
+- 현재 테스트 단계에서는 최대 4장까지만 허용
 
 ### 존재하지 않는 상품 ID
 
