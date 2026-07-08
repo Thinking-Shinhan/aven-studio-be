@@ -13,9 +13,11 @@ import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
@@ -36,6 +38,19 @@ public class BrandMoodController {
     ) {
         User user = usersService.findByLoginId(authentication.getName());
         BrandMoodAnalysisRespDto response = brandMoodService.analyze(brandId, request, user);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/analyze/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "PDF 기반 브랜드 무드 분석", description = "브랜드 PDF 자료를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
+    public ResponseEntity<BrandMoodAnalysisRespDto> analyzePdf(
+            @PathVariable Long brandId,
+            @Valid @RequestPart("request") BrandMoodAnalyzeReqDto request,
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        User user = usersService.findByLoginId(authentication.getName());
+        BrandMoodAnalysisRespDto response = brandMoodService.analyzePdf(brandId, request, file, user);
         return ResponseEntity.ok(response);
     }
 

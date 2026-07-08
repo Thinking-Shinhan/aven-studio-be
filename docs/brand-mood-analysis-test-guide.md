@@ -6,7 +6,7 @@
 - 분석 결과는 바로 저장하지 않는다.
 - 사용자가 확인/수정한 결과를 별도 저장 API로 `brand_moods`에 저장한다.
 
-> 주의: `POST /brands/{brandId}/moods/analyze`는 실제 Claude API 호출 비용이 발생한다.
+> 주의: `POST /brands/{brandId}/moods/analyze`, `POST /brands/{brandId}/moods/analyze/pdf`는 실제 Claude API 호출 비용이 발생한다.
 
 ## 사전 조건
 
@@ -22,6 +22,7 @@
 | API 이름 | Method | Endpoint | 설명 |
 |---|---:|---|---|
 | 브랜드 무드 분석 | POST | `/brands/{brandId}/moods/analyze` | Claude로 브랜드 무드 분석 JSON 반환. DB 저장 없음 |
+| PDF 기반 브랜드 무드 분석 | POST | `/brands/{brandId}/moods/analyze/pdf` | 첨부 PDF와 텍스트를 Claude로 분석. DB 저장 없음 |
 | 브랜드 무드 저장 | POST | `/brands/{brandId}/moods` | 사용자가 확인/수정한 무드 결과 저장 |
 | 브랜드 무드 단건 조회 | GET | `/brands/{brandId}/moods/{brandMoodId}` | 저장된 무드 조회 |
 
@@ -61,6 +62,67 @@ Cookie: accessToken={accessToken}
   "primaryColors": ["뉴트럴 톤"],
   "avoidElements": ["과한 장식성", "저가형 쇼핑몰 느낌"],
   "customBrandNote": "자료가 부족한 항목은 추가 룩북 또는 상세페이지 자료로 보완할 수 있습니다.",
+  "rawAnalysisJson": "{...}"
+}
+```
+
+## 1-1. PDF 기반 브랜드 무드 분석
+
+PDF 룩북, 브랜드 소개서, 상세페이지 PDF 등을 첨부해서 분석한다.
+분석 결과는 바로 저장하지 않고 사용자 확인용 JSON만 반환한다.
+
+```http
+POST https://api.aven-studio.store/brands/{brandId}/moods/analyze/pdf
+Content-Type: multipart/form-data
+Cookie: accessToken={accessToken}
+```
+
+### Postman Body 설정
+
+- Body: `form-data`
+- Key: `request`
+  - Type: `Text`
+  - Value:
+
+```json
+{
+  "sourceType": "PDF",
+  "sourceUrl": "https://polyteru-store.com",
+  "sourceText": "PDF와 함께 참고할 브랜드 설명이 있으면 입력합니다. 없으면 비워도 됩니다.",
+  "customInstruction": "이미지 생성에 필요한 시각 무드 중심으로 분석해주세요."
+}
+```
+
+- Key: `file`
+  - Type: `File`
+  - Value: 분석할 PDF 파일
+
+### 제한
+
+- PDF 파일만 첨부 가능
+- 파일 크기: 20MB 이하
+- 암호화 또는 비밀번호가 걸린 PDF는 사용하지 않음
+- 큰 PDF는 비용과 처리 시간이 커질 수 있음
+
+### Expected 200 Response
+
+```json
+{
+  "sourceType": "PDF",
+  "sourceUrl": "https://polyteru-store.com",
+  "brandSummary": "PDF에서 분석된 브랜드 요약",
+  "designPhilosophy": "PDF에서 분석된 디자인 철학",
+  "brandTone": ["정제됨", "차분함", "미니멀"],
+  "colorTemperature": "뉴트럴",
+  "saturation": "낮음",
+  "contrast": "중간",
+  "lighting": "부드러운 자연광",
+  "surfaceTexture": "자연스러운 원단감",
+  "backgroundMood": "미니멀 에디토리얼",
+  "composition": "여백을 활용한 단정한 구도",
+  "primaryColors": ["뉴트럴 톤"],
+  "avoidElements": ["과한 장식성", "저가형 쇼핑몰 느낌"],
+  "customBrandNote": "자료가 부족한 항목은 사용자가 직접 보완해야 합니다.",
   "rawAnalysisJson": "{...}"
 }
 ```
