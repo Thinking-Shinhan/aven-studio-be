@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.global.storage;
 
+import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
@@ -181,6 +182,19 @@ public class GcsService {
         );
 
         return signedUrl.toString();
+    }
+
+    public byte[] download(String objectName) {
+        if (objectName == null || objectName.isBlank()) {
+            throw new IllegalArgumentException("다운로드할 파일 경로가 없습니다.");
+        }
+
+        Blob blob = storage.get(bucketName, objectName);
+        if (blob == null || !blob.exists()) {
+            throw new IllegalArgumentException("GCS 파일을 찾을 수 없습니다.");
+        }
+
+        return blob.getContent();
     }
 
 }

@@ -1,6 +1,10 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
@@ -39,10 +43,12 @@ public class ImageGenerationService {
     private final ProductRepository productRepository;
     private final BrandRepository brandRepository;
     private final BrandMoodRepository brandMoodRepository;
+    private final AssetRepository assetRepository;
     private final UsersRepository usersRepository;
     private final AssetService assetService;
     private final GcsService gcsService;
     private final GoogleAiImageProvider googleAiImageProvider;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${image-generation.gcs-save-enabled:true}")
     private boolean gcsSaveEnabled;
@@ -57,7 +63,8 @@ public class ImageGenerationService {
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
         BrandMood brandMood = findBrandMood(request.getBrandMoodId(), brand.getId());
-        String compiledPrompt = compilePrompt(brandMood, request.getPrompt());
+        List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson());
+        String compiledPrompt = compilePrompt(brandMood, request.getPrompt(), referenceAssets);
 
         ImageGenerationJob job = savePendingJob(request, user, brand, product, compiledPrompt);
         long startedAt = System.currentTimeMillis();
@@ -67,7 +74,8 @@ public class ImageGenerationService {
 
             List<GoogleAiImageProvider.GeneratedImage> generatedImages = generateImages(
                     compiledPrompt,
-                    request.getRequestedCount()
+                    request.getRequestedCount(),
+                    toProviderReferenceImages(referenceAssets)
             );
 
             if (gcsSaveEnabled) {
@@ -205,11 +213,15 @@ public class ImageGenerationService {
         jobRepository.save(job);
     }
 
-    private List<GoogleAiImageProvider.GeneratedImage> generateImages(String prompt, int requestedCount) {
+    private List<GoogleAiImageProvider.GeneratedImage> generateImages(
+            String prompt,
+            int requestedCount,
+            List<GoogleAiImageProvider.ReferenceImage> referenceImages
+    ) {
         List<CompletableFuture<GoogleAiImageProvider.GeneratedImage>> futures = new ArrayList<>();
 
         for (int i = 0; i < requestedCount; i++) {
-            futures.add(CompletableFuture.supplyAsync(() -> googleAiImageProvider.generate(prompt)));
+            futures.add(CompletableFuture.supplyAsync(() -> googleAiImageProvider.generate(prompt, referenceImages)));
         }
 
         return futures.stream()
@@ -246,7 +258,7 @@ public class ImageGenerationService {
         return brandMood;
     }
 
-    private String compilePrompt(BrandMood brandMood, String userPrompt) {
+    private String compilePrompt(BrandMood brandMood, String userPrompt, List<ReferenceAssetInput> referenceAssets) {
         String brandInstruction = brandMood.getBrandInstruction();
         if (brandInstruction == null || brandInstruction.isBlank()) {
             throw new IllegalArgumentException("브랜드 무드 지시문이 비어 있습니다.");
@@ -256,12 +268,144 @@ public class ImageGenerationService {
                 [BRAND INSTRUCTION]
                 %s
 
+                %s
+
                 [IMAGE GENERATION REQUEST]
                 %s
                 """.formatted(
                 brandInstruction.trim(),
+                buildReferenceInstruction(referenceAssets),
                 userPrompt.trim()
         );
+    }
+
+    private String buildReferenceInstruction(List<ReferenceAssetInput> referenceAssets) {
+        if (referenceAssets == null || referenceAssets.isEmpty()) {
+            return "[REFERENCE IMAGE ROLE RULES]\nNo reference images are attached.";
+        }
+
+        StringBuilder keys = new StringBuilder();
+        for (ReferenceAssetInput referenceAsset : referenceAssets) {
+            keys.append("- ")
+                    .append(referenceAsset.key())
+                    .append(" = assetId ")
+                    .append(referenceAsset.asset().getId())
+                    .append("\n");
+        }
+
+        return """
+                [REFERENCE IMAGE ROLE RULES]
+                The attached reference images are provided with explicit input keys.
+                Interpret each reference image only according to its input key.
+                Never swap the role of each reference image.
+
+                productImages = GARMENT_REFERENCE.
+                productImages are the product accuracy references. The final model must wear the exact garment from productImages. Preserve the actual color, shape, fit, silhouette, length, material, logo position, washed fabric texture, drape, and construction details. Do not redesign the garment. Do not change the product category. Do not change the product color.
+
+                modelImage = MODEL_REFERENCE.
+                modelImage is the identity reference. Preserve face shape, skin tone, body proportion, hair impression, age impression, and overall human mood. If productImages provide only part of the outfit, use modelImage only for missing styling elements.
+
+                poseImage = POSE_COMPOSITION_REFERENCE.
+                poseImage is the exact pose and camera composition reference. Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame. Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
+
+                backgroundImage = BACKGROUND_REFERENCE.
+                backgroundImage is the background mood reference. Use backgroundImage for background color, lighting feeling, spatial depth, material mood, and overall atmosphere. Do not copy people, text, logos, signs, or unnecessary objects from backgroundImage.
+
+                [ATTACHED REFERENCE IMAGE KEYS]
+                %s
+                """.formatted(keys.toString().trim());
+    }
+
+    private List<ReferenceAssetInput> resolveReferenceAssets(String referenceJson) {
+        JsonNode root = parseReferenceJson(referenceJson);
+        if (root == null || root.isMissingNode() || root.isNull() || root.isEmpty()) {
+            return List.of();
+        }
+
+        List<ReferenceAssetInput> references = new ArrayList<>();
+        addProductImages(references, root.path("productImages"));
+        addSingleReference(references, "modelImage", root.path("modelImage"));
+        addSingleReference(references, "poseImage", root.path("poseImage"));
+        addSingleReference(references, "backgroundImage", root.path("backgroundImage"));
+
+        if (references.size() > 14) {
+            throw new IllegalArgumentException("참조 이미지는 최대 14장까지만 첨부할 수 있습니다.");
+        }
+
+        return references;
+    }
+
+    private JsonNode parseReferenceJson(String referenceJson) {
+        if (referenceJson == null || referenceJson.isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+
+        try {
+            return objectMapper.readTree(referenceJson);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("referenceJson 형식이 올바르지 않습니다.", e);
+        }
+    }
+
+    private void addProductImages(List<ReferenceAssetInput> references, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        if (node.isArray()) {
+            int index = 0;
+            for (JsonNode item : node) {
+                addReference(references, "productImages[" + index + "]", item);
+                index++;
+            }
+            return;
+        }
+
+        addReference(references, "productImages[0]", node);
+    }
+
+    private void addSingleReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        addReference(references, key, node);
+    }
+
+    private void addReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+        Long assetId = extractAssetId(node);
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new IllegalArgumentException("참조 이미지를 찾을 수 없습니다. assetId=" + assetId));
+
+        references.add(new ReferenceAssetInput(key, asset));
+    }
+
+    private Long extractAssetId(JsonNode node) {
+        if (node.isNumber()) {
+            return node.asLong();
+        }
+
+        if (node.isObject() && node.hasNonNull("assetId")) {
+            return node.path("assetId").asLong();
+        }
+
+        throw new IllegalArgumentException("referenceJson에는 assetId 숫자 또는 {\"assetId\": number} 형식만 사용할 수 있습니다.");
+    }
+
+    private List<GoogleAiImageProvider.ReferenceImage> toProviderReferenceImages(
+            List<ReferenceAssetInput> referenceAssets
+    ) {
+        if (referenceAssets == null || referenceAssets.isEmpty()) {
+            return List.of();
+        }
+
+        return referenceAssets.stream()
+                .map(referenceAsset -> new GoogleAiImageProvider.ReferenceImage(
+                        referenceAsset.key(),
+                        gcsService.download(referenceAsset.asset().getObjectName()),
+                        referenceAsset.asset().getContentType()
+                ))
+                .toList();
     }
 
     private ImageGenerationJobRespDto toResponse(Long jobId, List<ImageGenerationResult> results) {
@@ -326,5 +470,11 @@ public class ImageGenerationService {
 
     private int elapsedMs(long startedAt) {
         return Math.toIntExact(System.currentTimeMillis() - startedAt);
+    }
+
+    private record ReferenceAssetInput(
+            String key,
+            Asset asset
+    ) {
     }
 }

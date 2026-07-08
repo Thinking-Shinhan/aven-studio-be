@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -27,14 +29,15 @@ public class GoogleAiImageProvider {
     private final RestClient restClient = RestClient.create();
 
     public GeneratedImage generate(String prompt) {
+        return generate(prompt, Collections.emptyList());
+    }
+
+    public GeneratedImage generate(String prompt, List<ReferenceImage> referenceImages) {
         validateApiKey();
 
         Map<String, Object> requestBody = Map.of(
                 "model", imageModel,
-                "input", List.of(Map.of(
-                        "type", "text",
-                        "text", prompt
-                ))
+                "input", buildInput(prompt, referenceImages)
         );
 
         String response;
@@ -55,6 +58,32 @@ public class GoogleAiImageProvider {
         }
 
         return parseGeneratedImage(response);
+    }
+
+    private List<Map<String, Object>> buildInput(String prompt, List<ReferenceImage> referenceImages) {
+        List<Map<String, Object>> input = new ArrayList<>();
+        input.add(Map.of(
+                "type", "text",
+                "text", prompt
+        ));
+
+        if (referenceImages == null || referenceImages.isEmpty()) {
+            return input;
+        }
+
+        for (ReferenceImage referenceImage : referenceImages) {
+            input.add(Map.of(
+                    "type", "text",
+                    "text", "Reference image key: " + referenceImage.key()
+            ));
+            input.add(Map.of(
+                    "type", "image",
+                    "mime_type", normalizeMimeType(referenceImage.contentType()),
+                    "data", Base64.getEncoder().encodeToString(referenceImage.bytes())
+            ));
+        }
+
+        return input;
     }
 
     public String getImageModel() {
@@ -145,6 +174,13 @@ public class GoogleAiImageProvider {
     }
 
     public record GeneratedImage(
+            byte[] bytes,
+            String contentType
+    ) {
+    }
+
+    public record ReferenceImage(
+            String key,
             byte[] bytes,
             String contentType
     ) {
