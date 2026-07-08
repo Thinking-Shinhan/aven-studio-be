@@ -11,5 +11,10 @@ public final class ProductSheetHeaders {
     public static final String DESCRIPTION = "상품 설명";
     public static final String FABRICATION = "소재";
     public static final String COLOR = "색상";
+    public static final String LINING = "안감";
+    public static final String ELASTICITY = "신축성";
+    public static final String TRANSPARENCY = "비침";
+    public static final String TOUCH_FEELING = "촉감";
+    public static final String THICKNESS = "두께감";
     private ProductSheetHeaders() {}
 }

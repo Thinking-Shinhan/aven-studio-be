@@ -9,6 +9,11 @@ public record SheetProductRow(
         String fitDescription,
         String description,
         String fabricationDescription,
-        String color
+        String color,
+        int lining,
+        int elasticity,
+        int transparency,
+        int touchFeeling,
+        int thickness
 ) {
 }

@@ -28,7 +28,12 @@ public class SheetRowParser {
                 getText(columns, ProductSheetHeaders.FIT),
                 getText(columns, ProductSheetHeaders.DESCRIPTION),
                 getText(columns, ProductSheetHeaders.FABRICATION),
-                getText(columns, ProductSheetHeaders.COLOR)
+                getText(columns, ProductSheetHeaders.COLOR),
+                requireCode(columns, ProductSheetHeaders.LINING, ProductAttributeCodes.LINING, "안감"),
+                requireCode(columns, ProductSheetHeaders.ELASTICITY, ProductAttributeCodes.ELASTICITY, "신축성"),
+                requireCode(columns, ProductSheetHeaders.TRANSPARENCY, ProductAttributeCodes.TRANSPARENCY, "비침"),
+                requireCode(columns, ProductSheetHeaders.TOUCH_FEELING, ProductAttributeCodes.TOUCH_FEELING, "촉감"),
+                requireCode(columns, ProductSheetHeaders.THICKNESS, ProductAttributeCodes.THICKNESS, "두께감")
         ));
     }
 
@@ -110,6 +115,15 @@ public class SheetRowParser {
         } catch (NumberFormatException e) {
             throw new RowSkipException(label + " 형식이 올바르지 않습니다: " + raw);
         }
+    }
+
+    private int requireCode(RowColumns columns, String header, Map<String, Integer> codeTable, String label) {
+        String raw = requireText(columns, header, label);
+        Integer code = codeTable.get(raw);
+        if (code == null) {
+            throw new RowSkipException(label + " 값이 올바르지 않습니다: " + raw);
+        }
+        return code;
     }
 
     private BigDecimal requireBigDecimal(RowColumns columns, String header, String label) {

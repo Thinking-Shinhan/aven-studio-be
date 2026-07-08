@@ -55,7 +55,12 @@ public class ProductSheetSyncWriter {
                     row.price(),
                     row.fitDescription(),
                     row.description(),
-                    row.fabricationDescription()
+                    row.fabricationDescription(),
+                    row.lining(),
+                    row.elasticity(),
+                    row.transparency(),
+                    row.touchFeeling(),
+                    row.thickness()
             ));
         }
 
@@ -67,7 +72,12 @@ public class ProductSheetSyncWriter {
                 row.price(),
                 row.fitDescription(),
                 row.description(),
-                row.fabricationDescription()
+                row.fabricationDescription(),
+                row.lining(),
+                row.elasticity(),
+                row.transparency(),
+                row.touchFeeling(),
+                row.thickness()
         );
         return product;
     }
