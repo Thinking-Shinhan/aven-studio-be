@@ -1,10 +1,13 @@
 package kr.co.daeun.avenstudiobe.global.config;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import kr.co.daeun.avenstudiobe.global.exception.ErrorResponse;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 
 import kr.co.daeun.avenstudiobe.domain.auth.security.JwtFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -26,6 +29,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
+    private final ObjectMapper objectMapper;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -46,6 +50,14 @@ public class SecurityConfig {
                                 "/v3/api-docs/**"
                         ).permitAll()
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                            response.setContentType("application/json;charset=UTF-8");
+                            objectMapper.writeValue(response.getWriter(),
+                                    ErrorResponse.of("UNAUTHORIZED", "로그인이 필요합니다."));
+                        })
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 

@@ -16,4 +16,6 @@ public interface SizeMeasurementRepository extends JpaRepository<SizeMeasurement
     @Modifying
     @Query("DELETE FROM SizeMeasurement sm WHERE sm.size IN :sizes")
     void deleteBySizeIn(@Param("sizes") List<Size> sizes);
+
+    List<SizeMeasurement> findBySizeIdInOrderByIdAsc(List<Long> productSizeIds);
 }

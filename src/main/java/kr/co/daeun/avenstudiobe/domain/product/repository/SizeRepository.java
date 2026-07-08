@@ -14,6 +14,7 @@ import java.util.List;
 public interface SizeRepository extends JpaRepository<Size, Long> {
 
     List<Size> findByProduct(Product product);
+    List<Size> findByProductIdOrderByIdAsc(Long productId);
 
     @Modifying
     @Query("DELETE FROM Size s WHERE s.product = :product")
