@@ -94,7 +94,7 @@ Cookie: accessToken={accessToken}
   "brandMoodId": 1,
   "cutType": "MODEL_CUT",
   "generationMode": "PARALLEL",
-  "prompt": "프리미엄 패션 이커머스 모델컷을 생성한다. 상품의 색상과 형태를 유지하고, 브랜드 무드는 차분한 쿨톤, 저채도, 정제된 분위기로 반영한다. 최종 결과에는 한 명의 모델만 등장해야 하며 텍스트, 워터마크, 콜라주를 만들지 않는다.",
+  "prompt": "프리미엄 패션 이커머스 모델컷을 생성한다. 상품의 색상과 형태를 유지한다. 최종 결과에는 한 명의 모델만 등장해야 하며 텍스트, 워터마크, 콜라주를 만들지 않는다.",
   "negativePrompt": "cheap ecommerce, neon, watermark, text overlay, collage",
   "userOptionsJson": "{\"colorTemperature\":\"cool\",\"cameraAngle\":\"eye_level_front\",\"framing\":\"full_body\"}",
   "referenceJson": "{}",
@@ -108,10 +108,10 @@ Cookie: accessToken={accessToken}
 |---|---:|---|
 | `brandId` | O | 이미지 생성에 사용할 브랜드 ID |
 | `productId` | O | 생성 결과를 연결할 상품 ID |
-| `brandMoodId` | O | 이미지 생성에 사용할 브랜드 무드 ID |
+| `brandMoodId` | O | 이미지 생성에 사용할 브랜드 무드 ID. 해당 무드의 `brandInstruction`이 최종 프롬프트 앞에 자동 삽입됨 |
 | `cutType` | O | `MODEL_CUT`, `PRODUCT_CUT` 등 컷 유형 |
 | `generationMode` | X | 현재는 `PARALLEL` 사용 |
-| `prompt` | O | 최종 생성 프롬프트 |
+| `prompt` | O | 사용자 또는 샷 템플릿 기반 이미지 생성 요청 프롬프트 |
 | `negativePrompt` | X | 금지 프롬프트 기록용 |
 | `userOptionsJson` | X | 사용자 선택 옵션 JSON 문자열 |
 | `referenceJson` | X | 참조 이미지 정보 JSON 문자열 |
@@ -214,7 +214,7 @@ order by id desc;
 - `status = GENERATED`
 - `product_id`가 요청한 상품 ID와 동일
 - `object_name`이 `generated/{productId}/{jobId}/...` 형태
-- `prompt`에 요청 프롬프트 저장
+- `prompt`에 브랜드 무드 지시문과 사용자 요청이 결합된 최종 프롬프트 저장
 
 ### 이미지 생성 결과 테이블 확인
 
@@ -345,5 +345,5 @@ Content-Type: application/json
 
 | 기능명 | Method | Endpoint | 설명 |
 |---|---:|---|---|
-| 이미지 생성 요청 | POST | `/image-generation/jobs` | Google AI 이미지 생성 요청, GCS 자동 저장, assets 자동 저장 |
+| 이미지 생성 요청 | POST | `/image-generation/jobs` | 브랜드 무드 지시문을 프롬프트에 자동 반영한 뒤 Google AI 이미지 생성 요청, GCS 자동 저장, assets 자동 저장 |
 | 이미지 생성 결과 조회 | GET | `/image-generation/jobs/{jobId}` | 생성 Job 상태와 결과 이미지 signed URL 조회 |
