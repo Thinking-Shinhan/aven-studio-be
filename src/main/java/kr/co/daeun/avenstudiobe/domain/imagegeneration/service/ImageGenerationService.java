@@ -15,8 +15,10 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobRes
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationResultRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationJob;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationResult;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationJobRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationResultRepository;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
@@ -27,6 +29,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
 import java.util.Base64;
 import java.util.ArrayList;
@@ -44,11 +47,13 @@ public class ImageGenerationService {
     private final BrandRepository brandRepository;
     private final BrandMoodRepository brandMoodRepository;
     private final AssetRepository assetRepository;
+    private final ReferenceAssetRepository referenceAssetRepository;
     private final UsersRepository usersRepository;
     private final AssetService assetService;
     private final GcsService gcsService;
     private final GoogleAiImageProvider googleAiImageProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient restClient = RestClient.create();
 
     @Value("${image-generation.gcs-save-enabled:true}")
     private boolean gcsSaveEnabled;
@@ -288,8 +293,8 @@ public class ImageGenerationService {
         for (ReferenceAssetInput referenceAsset : referenceAssets) {
             keys.append("- ")
                     .append(referenceAsset.key())
-                    .append(" = assetId ")
-                    .append(referenceAsset.asset().getId())
+                    .append(" = ")
+                    .append(referenceAsset.sourceLabel())
                     .append("\n");
         }
 
@@ -327,6 +332,10 @@ public class ImageGenerationService {
         addSingleReference(references, "modelImage", root.path("modelImage"));
         addSingleReference(references, "poseImage", root.path("poseImage"));
         addSingleReference(references, "backgroundImage", root.path("backgroundImage"));
+        addServiceReference(references, "modelImage", root.path("modelReferenceId"));
+        addServiceReference(references, "poseImage", root.path("poseReferenceId"));
+        addServiceReference(references, "backgroundImage", root.path("backgroundReferenceId"));
+        addServiceReference(references, "shotReferenceImage", root.path("shotReferenceId"));
 
         if (references.size() > 14) {
             throw new IllegalArgumentException("참조 이미지는 최대 14장까지만 첨부할 수 있습니다.");
@@ -377,7 +386,50 @@ public class ImageGenerationService {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("참조 이미지를 찾을 수 없습니다. assetId=" + assetId));
 
-        references.add(new ReferenceAssetInput(key, asset));
+        references.add(new ReferenceAssetInput(
+                key,
+                "assetId " + asset.getId(),
+                gcsService.download(asset.getObjectName()),
+                asset.getContentType()
+        ));
+    }
+
+    private void addServiceReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        Long referenceAssetId = extractAssetId(node);
+        ReferenceAsset referenceAsset = referenceAssetRepository.findById(referenceAssetId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "서비스 레퍼런스 이미지를 찾을 수 없습니다. referenceAssetId=" + referenceAssetId
+                ));
+
+        if (!Boolean.TRUE.equals(referenceAsset.getActive())) {
+            throw new IllegalArgumentException("비활성 서비스 레퍼런스 이미지입니다. referenceAssetId=" + referenceAssetId);
+        }
+
+        references.add(new ReferenceAssetInput(
+                key,
+                "referenceAssetId " + referenceAsset.getId() + " (" + referenceAsset.getReferenceKey() + ")",
+                readReferenceAssetBytes(referenceAsset),
+                referenceAsset.getContentType()
+        ));
+    }
+
+    private byte[] readReferenceAssetBytes(ReferenceAsset referenceAsset) {
+        if (referenceAsset.getObjectName() != null && !referenceAsset.getObjectName().isBlank()) {
+            return gcsService.download(referenceAsset.getObjectName());
+        }
+
+        if (referenceAsset.getImageUrl() == null || referenceAsset.getImageUrl().isBlank()) {
+            throw new IllegalArgumentException("서비스 레퍼런스 이미지 URL이 비어 있습니다.");
+        }
+
+        return restClient.get()
+                .uri(referenceAsset.getImageUrl())
+                .retrieve()
+                .body(byte[].class);
     }
 
     private Long extractAssetId(JsonNode node) {
@@ -402,8 +454,8 @@ public class ImageGenerationService {
         return referenceAssets.stream()
                 .map(referenceAsset -> new GoogleAiImageProvider.ReferenceImage(
                         referenceAsset.key(),
-                        gcsService.download(referenceAsset.asset().getObjectName()),
-                        referenceAsset.asset().getContentType()
+                        referenceAsset.bytes(),
+                        referenceAsset.contentType()
                 ))
                 .toList();
     }
@@ -474,7 +526,9 @@ public class ImageGenerationService {
 
     private record ReferenceAssetInput(
             String key,
-            Asset asset
+            String sourceLabel,
+            byte[] bytes,
+            String contentType
     ) {
     }
 }
