@@ -83,6 +83,37 @@ public class AssetService {
     }
 
     @Transactional
+    public Asset saveGeneratedImage(
+            byte[] bytes,
+            String contentType,
+            Product product,
+            Long jobId,
+            String prompt
+    ) {
+        GcsService.UploadedFile uploaded = gcsService.uploadGeneratedImage(bytes, contentType, product.getId(), jobId);
+
+        try {
+            Asset asset = Asset.builder()
+                    .type("GENERATED")
+                    .fileUrl(uploaded.fileUrl())
+                    .objectName(uploaded.objectName())
+                    .originalFilename(uploaded.originalFilename())
+                    .contentType(uploaded.contentType())
+                    .size(uploaded.size())
+                    .prompt(prompt)
+                    .status("GENERATED")
+                    .product(product)
+                    .build();
+
+            return assetRepository.save(asset);
+
+        } catch (RuntimeException e) {
+            gcsService.deleteQuietly(uploaded.objectName());
+            throw e;
+        }
+    }
+
+    @Transactional
     public void deleteAsset(Asset asset) {
         gcsService.delete(asset.getObjectName());
         assetRepository.delete(asset);

@@ -37,6 +37,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException e) {
+        log.error("외부 연동 처리 실패", e);
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("BAD_GATEWAY", e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception e) {
         log.error("서버 내부 오류 발생", e);
