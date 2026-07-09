@@ -1,50 +1,76 @@
-# 이미지 생성 자동저장 테스트 가이드
+# 이미지 생성/업로드 테스트 가이드
 
-## 테스트 목적
+이 문서는 Postman으로 아래 기능을 테스트하기 위한 가이드다.
 
-- `POST /image-generation/jobs` 요청으로 Google AI 이미지 생성이 호출되는지 확인한다.
-- `requestedCount` 수만큼 병렬 생성 호출이 수행되는지 확인한다.
-- 생성된 이미지가 GCS에 자동 저장되는지 확인한다.
-- 저장된 이미지가 `assets` 테이블에 `GENERATED` 상태로 자동 저장되는지 확인한다.
-- `GET /image-generation/jobs/{jobId}`로 생성 결과와 signed URL을 조회할 수 있는지 확인한다.
+- 상품 앞면/뒷면/코디 이미지 업로드
+- 업로드 이미지 조회
+- 브랜드 무드 분석/저장/조회
+- 추천 모델/포즈/배경 이미지 조회
+- 이미지 생성 요청
+- 생성 결과 자동 저장 확인
 
-> 주의: 실제 이미지 생성 API 호출 비용은 `POST /image-generation/jobs`를 호출할 때 발생한다.
+> 비용 주의: `POST /image-generation/jobs`만 실제 이미지 생성 API를 호출하므로 비용이 발생할 수 있다.
 
-## 사전 준비
+## 0. 테스트 전 준비
 
-### 서버 환경변수
+### 서버 주소
 
-서버 실행 전에 아래 환경변수가 필요하다.
+로컬:
 
-```bash
-export DB_USERNAME="{supabase db username}"
-export DB_PASSWORD="{supabase db password}"
-export JWT_SECRET="{jwt secret}"
-export GOOGLE_AI_API_KEY="{google ai studio api key}"
-export GOOGLE_AI_IMAGE_MODEL="gemini-2.5-flash-image"
+```text
+http://localhost:8080
 ```
 
-`GOOGLE_AI_IMAGE_MODEL`은 생략하면 기본값으로 `gemini-2.5-flash-image`가 사용된다.
+배포 서버:
 
-### DB 데이터
+```text
+https://api.aven-studio.store
+```
 
-테스트 전에 아래 데이터가 DB에 존재해야 한다.
+아래 예시는 로컬 기준으로 작성했다. 배포 서버에서 테스트할 때는 host만 바꾸면 된다.
 
-- 로그인 가능한 사용자
-- 브랜드
-- 상품
-- 브랜드 무드
-- 상품과 브랜드의 연결 관계
+### 인증 방식
 
-요청에 사용하는 `brandId`, `productId`, `brandMoodId`는 실제 DB에 존재하는 값이어야 한다.
+이 서버는 `Authorization: Bearer` 헤더가 아니라 `accessToken` 쿠키를 사용한다.
+
+로그인 후 Postman 쿠키 저장소에 `accessToken`이 들어가 있어야 한다.
+
+### DB 선반영 SQL
+
+`asset_role` 컬럼이 아직 Supabase에 없다면 먼저 실행한다.
+
+```sql
+alter table assets
+    add column if not exists asset_role varchar(30);
+
+update assets
+set asset_role = case
+    when type = 'GENERATED' then 'GENERATED_RESULT'
+    when type = 'IMAGE' then 'PRODUCT_IMAGE'
+    else asset_role
+end
+where asset_role is null;
+```
+
+### 테스트에 필요한 데이터
+
+아래 값은 실제 DB에 존재해야 한다.
+
+| 값 | 설명 |
+| --- | --- |
+| `brandId` | 로그인 사용자의 브랜드 ID |
+| `productId` | 해당 브랜드에 속한 상품 ID |
+| `brandMoodId` | 저장된 브랜드 무드 ID |
+
+로그인 사용자의 브랜드와 요청의 `brandId`, `productId` 소속 브랜드가 맞지 않으면 실패한다.
 
 ## 1. 로그인
 
 ### API
 
-| 기능 | Method | Endpoint |
-|---|---:|---|
-| 로그인 | POST | `/auth/login` |
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `POST` | `/auth/login` | 없음 |
 
 ### Request
 
@@ -62,10 +88,9 @@ Content-Type: application/json
 
 ### 확인
 
-응답 `Set-Cookie` 헤더에서 `accessToken` 쿠키를 확인한다.
+응답 헤더의 `Set-Cookie`에 `accessToken`이 있는지 확인한다.
 
-이 서버의 JWT 필터는 `Authorization: Bearer` 헤더가 아니라 `accessToken` 쿠키를 읽는다.
-Postman에서는 로그인 요청 후 쿠키가 자동 저장되면 그대로 다음 요청을 보내면 된다.
+이후 요청에는 아래 쿠키가 포함되어야 한다.
 
 ```http
 Cookie: accessToken={accessToken}
@@ -73,11 +98,15 @@ Cookie: accessToken={accessToken}
 
 ## 2. 상품 이미지 업로드
 
+모델컷 생성에 필요한 상품 앞면, 뒷면, 코디 이미지를 업로드한다.
+
+업로드된 이미지는 GCS에 저장되고, `assets` 테이블에 저장된다. 다음에 같은 상품을 선택하면 `GET /assets/products/{productId}/images`로 다시 조회할 수 있다.
+
 ### API
 
-| 기능 | Method | Endpoint |
-|---|---:|---|
-| 상품 이미지 업로드 | POST | `/assets/products/{productId}/images` |
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `POST` | `/assets/products/{productId}/images` | 이미지 생성 비용 없음 |
 
 ### Request
 
@@ -87,32 +116,42 @@ Content-Type: multipart/form-data
 Cookie: accessToken={accessToken}
 ```
 
-Postman `form-data` 기준:
+Postman `Body > form-data`:
 
-| Key | Type | Value |
-|---|---|---|
+| Key | Type | 예시 Value |
+| --- | --- | --- |
 | `files` | File | front.png |
 | `roles` | Text | PRODUCT_FRONT |
 | `files` | File | back.png |
 | `roles` | Text | PRODUCT_BACK |
 
-`files`와 `roles`는 같은 순서로 매칭된다. 예를 들어 첫 번째 파일은 `PRODUCT_FRONT`, 두 번째 파일은 `PRODUCT_BACK`으로 저장된다.
+`files`와 `roles`는 같은 순서로 매칭된다.
 
-권장 role:
+예시:
 
-| role | 설명 |
-|---|---|
+- 첫 번째 `files` = `front.png`
+- 첫 번째 `roles` = `PRODUCT_FRONT`
+- 두 번째 `files` = `back.png`
+- 두 번째 `roles` = `PRODUCT_BACK`
+
+### role 값
+
+| role | 의미 |
+| --- | --- |
 | `PRODUCT_FRONT` | 상품 앞면 |
 | `PRODUCT_BACK` | 상품 뒷면 |
 | `COORDINATION_ITEM` | 코디용 하의, 신발 등 |
 | `DETAIL` | 디테일 이미지 |
+| `PRODUCT_IMAGE` | 역할 미분류 상품 이미지 |
 
-### Expected 201 Response
+### Expected Response
+
+Status: `201 Created`
 
 ```json
 [
   {
-    "assetId": 1,
+    "assetId": 101,
     "assetRole": "PRODUCT_FRONT",
     "imageUrl": "https://storage.googleapis.com/...",
     "objectName": "products/1/...",
@@ -121,7 +160,7 @@ Postman `form-data` 기준:
     "size": 123456
   },
   {
-    "assetId": 2,
+    "assetId": 102,
     "assetRole": "PRODUCT_BACK",
     "imageUrl": "https://storage.googleapis.com/...",
     "objectName": "products/1/...",
@@ -132,15 +171,286 @@ Postman `form-data` 기준:
 ]
 ```
 
-이미지 생성 요청의 `referenceJson.productImages`에는 여기서 받은 `assetId`를 넣는다.
+### 다음 단계에서 사용할 값
 
-## 3. 이미지 생성 요청
+이미지 생성 요청의 `referenceJson.productImages`에 `assetId`를 넣는다.
+
+```json
+{
+  "productImages": [101, 102]
+}
+```
+
+## 3. 상품 이미지 조회
+
+상품을 다시 선택했을 때 기존 업로드 이미지가 계속 보이는지 확인한다.
 
 ### API
 
-| 기능 | Method | Endpoint |
-|---|---:|---|
-| 이미지 생성 요청 | POST | `/image-generation/jobs` |
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `GET` | `/assets/products/{productId}/images` | 없음 |
+
+### Request
+
+```http
+GET http://localhost:8080/assets/products/1/images
+Cookie: accessToken={accessToken}
+```
+
+### Expected Response
+
+Status: `200 OK`
+
+```json
+[
+  {
+    "assetId": 102,
+    "assetRole": "PRODUCT_BACK",
+    "imageUrl": "https://signed-url...",
+    "objectName": "products/1/...",
+    "originalFilename": "back.png",
+    "contentType": "image/png",
+    "size": 123456
+  },
+  {
+    "assetId": 101,
+    "assetRole": "PRODUCT_FRONT",
+    "imageUrl": "https://signed-url...",
+    "objectName": "products/1/...",
+    "originalFilename": "front.png",
+    "contentType": "image/png",
+    "size": 123456
+  }
+]
+```
+
+### 확인할 것
+
+- `assetRole`이 업로드한 값과 맞는지 확인
+- `imageUrl`을 브라우저에서 열었을 때 이미지가 보이는지 확인
+- 같은 상품을 다시 조회해도 업로드한 이미지가 남아 있는지 확인
+
+## 4. 브랜드 무드 분석
+
+브랜드 무드 분석은 이미지 생성 비용이 발생하지 않는다. Claude API 비용은 발생할 수 있다.
+
+분석 API는 DB에 저장하지 않는다. 사용자에게 보여준 뒤 저장 API를 따로 호출해야 한다.
+
+### API
+
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `POST` | `/brands/{brandId}/moods/analyze` | 이미지 생성 비용 없음 |
+
+### Request
+
+```http
+POST http://localhost:8080/brands/1/moods/analyze
+Content-Type: application/json
+Cookie: accessToken={accessToken}
+```
+
+```json
+{
+  "sourceType": "TEXT",
+  "sourceUrl": "https://polyteru-store.com",
+  "sourceText": "POLYTERU는 동북아시아 패션 문화와 복식사의 다양한 장르에서 영감을 받아 정교한 패턴과 우수한 소재로 현대적 일상복을 선보이는 미니멀 설계 레이블입니다.",
+  "customInstruction": "이미지 생성에 필요한 시각 무드 중심으로 분석해주세요."
+}
+```
+
+### Expected Response
+
+Status: `200 OK`
+
+```json
+{
+  "sourceType": "TEXT",
+  "sourceUrl": "https://polyteru-store.com",
+  "brandSummary": "동북아시아 패션 문화와 복식사에서 영감을 받은 미니멀 설계 레이블",
+  "designPhilosophy": "정교한 패턴과 우수한 소재로 현대적 일상복을 전개",
+  "brandTone": ["차분함", "절제됨", "정교함"],
+  "colorTemperature": "뉴트럴",
+  "saturation": "낮음",
+  "contrast": "낮음",
+  "lighting": "자연광, 부드러운 조명",
+  "surfaceTexture": "자연스러운 원단감, 정교한 봉제 디테일",
+  "backgroundMood": "미니멀하고 차분한 배경",
+  "composition": "절제된 실루엣을 강조하는 구도",
+  "primaryColors": ["뉴트럴 톤"],
+  "avoidElements": ["화려한 색상", "과도한 장식"],
+  "customBrandNote": "원단의 질감과 봉제 정교함이 돋보이는 조명과 구성 필요",
+  "rawAnalysisJson": "{...}"
+}
+```
+
+## 5. 브랜드 무드 저장
+
+분석 결과를 사용자가 확인하거나 수정한 뒤 DB에 저장한다.
+
+이미지 생성 요청에는 여기서 저장된 `brandMoodId`가 필요하다.
+
+### API
+
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `POST` | `/brands/{brandId}/moods` | 없음 |
+
+### Request
+
+```http
+POST http://localhost:8080/brands/1/moods
+Content-Type: application/json
+Cookie: accessToken={accessToken}
+```
+
+```json
+{
+  "name": "POLYTERU 기본 무드",
+  "sourceType": "TEXT",
+  "sourceUrl": "https://polyteru-store.com",
+  "brandSummary": "동북아시아 패션 문화와 복식사에서 영감을 받은 미니멀 설계 레이블",
+  "designPhilosophy": "정교한 패턴과 우수한 소재로 현대적 일상복을 전개",
+  "brandTone": ["차분함", "절제됨", "정교함"],
+  "colorTemperature": "뉴트럴",
+  "saturation": "낮음",
+  "contrast": "낮음",
+  "lighting": "자연광, 부드러운 조명",
+  "surfaceTexture": "자연스러운 원단감, 정교한 봉제 디테일",
+  "backgroundMood": "미니멀하고 차분한 배경",
+  "composition": "절제된 실루엣을 강조하는 구도",
+  "primaryColors": ["뉴트럴 톤"],
+  "avoidElements": ["화려한 색상", "과도한 장식"],
+  "customBrandNote": "원단의 질감과 봉제 정교함이 돋보이는 조명과 구성 필요",
+  "brandInstruction": "[BRAND MOOD]\n브랜드 요약: 동북아시아 패션 문화와 복식사에서 영감을 받은 미니멀 설계 레이블\n브랜드 톤: 차분함, 절제됨, 정교함\n",
+  "rawAnalysisJson": "{}"
+}
+```
+
+### Expected Response
+
+Status: `201 Created`
+
+```json
+{
+  "brandMoodId": 3,
+  "brandId": 1,
+  "name": "POLYTERU 기본 무드",
+  "version": 1,
+  "status": "ACTIVE",
+  "sourceType": "TEXT",
+  "sourceUrl": "https://polyteru-store.com",
+  "brandInstruction": "[BRAND MOOD]\n..."
+}
+```
+
+### 다음 단계에서 사용할 값
+
+이미지 생성 요청의 `brandMoodId`에 응답의 `brandMoodId`를 넣는다.
+
+## 6. 추천 모델/포즈/배경 이미지 조회
+
+서비스가 미리 제공하는 모델, 포즈, 배경 이미지를 조회한다.
+
+여기서 받은 `referenceAssetId`를 이미지 생성 요청에 사용한다.
+
+### API
+
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `GET` | `/image-generation/reference-assets?assetType=MODEL` | 없음 |
+| `GET` | `/image-generation/reference-assets?assetType=POSE` | 없음 |
+| `GET` | `/image-generation/reference-assets?assetType=BACKGROUND` | 없음 |
+
+### Request
+
+```http
+GET http://localhost:8080/image-generation/reference-assets?assetType=MODEL
+Cookie: accessToken={accessToken}
+```
+
+```http
+GET http://localhost:8080/image-generation/reference-assets?assetType=POSE
+Cookie: accessToken={accessToken}
+```
+
+```http
+GET http://localhost:8080/image-generation/reference-assets?assetType=BACKGROUND
+Cookie: accessToken={accessToken}
+```
+
+### Expected Response
+
+```json
+{
+  "assetType": "MODEL",
+  "referenceAssets": [
+    {
+      "referenceAssetId": 1,
+      "key": "model_001",
+      "assetType": "MODEL",
+      "label": "추천 모델 1",
+      "description": "차분한 인상의 모델",
+      "imageUrl": "https://..."
+    }
+  ]
+}
+```
+
+### 다음 단계에서 사용할 값
+
+이미지 생성 요청의 `referenceJson`에 아래 값을 넣는다.
+
+```json
+{
+  "modelReferenceId": 1,
+  "poseReferenceId": 2,
+  "backgroundReferenceId": 3
+}
+```
+
+## 7. 이미지 생성 옵션 조회
+
+색온도, 카메라 각도, 구도, 비율, 출력 개수 옵션을 조회한다.
+
+### API
+
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `GET` | `/image-generation/options` | 없음 |
+
+### Request
+
+```http
+GET http://localhost:8080/image-generation/options
+Cookie: accessToken={accessToken}
+```
+
+### 확인
+
+응답의 `key` 값을 이미지 생성 요청의 `userOptionsJson`에 넣는다.
+
+예:
+
+```json
+{
+  "colorTemperature": "COOL",
+  "cameraAngle": "EYE_LEVEL_FRONT",
+  "framing": "FULL_BODY",
+  "aspectRatio": "4:5"
+}
+```
+
+## 8. 이미지 생성 요청
+
+> 비용 주의: 이 API는 실제 Google AI 이미지 생성 API를 호출한다.
+
+### API
+
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `POST` | `/image-generation/jobs` | Google AI 이미지 생성 비용 발생 |
 
 ### Request
 
@@ -150,140 +460,145 @@ Content-Type: application/json
 Cookie: accessToken={accessToken}
 ```
 
+`referenceJson`과 `userOptionsJson`은 현재 객체가 아니라 JSON 문자열로 보내야 한다.
+
 ```json
 {
   "brandId": 1,
   "productId": 1,
-  "brandMoodId": 1,
+  "brandMoodId": 3,
   "cutType": "MODEL_CUT",
   "generationMode": "PARALLEL",
-  "prompt": "프리미엄 패션 이커머스 모델컷을 생성한다. 상품의 색상과 형태를 유지한다. 최종 결과에는 한 명의 모델만 등장해야 하며 텍스트, 워터마크, 콜라주를 만들지 않는다.",
+  "prompt": "프리미엄 패션 이커머스 모델컷을 생성해줘. 상품의 색상과 형태는 유지해줘.",
   "negativePrompt": "cheap ecommerce, neon, watermark, text overlay, collage",
-  "userOptionsJson": "{\"colorTemperature\":\"cool\",\"cameraAngle\":\"eye_level_front\",\"framing\":\"full_body\"}",
-  "referenceJson": "{\"productImages\":[1,2],\"modelReferenceId\":3,\"poseReferenceId\":4,\"backgroundReferenceId\":5}",
-  "requestedCount": 4
+  "userOptionsJson": "{\"colorTemperature\":\"COOL\",\"cameraAngle\":\"EYE_LEVEL_FRONT\",\"framing\":\"FULL_BODY\",\"aspectRatio\":\"4:5\"}",
+  "referenceJson": "{\"productImages\":[101,102],\"modelReferenceId\":1,\"poseReferenceId\":2,\"backgroundReferenceId\":3}",
+  "requestedCount": 1
 }
 ```
 
 ### 필드 설명
 
 | 필드 | 필수 | 설명 |
-|---|---:|---|
-| `brandId` | O | 이미지 생성에 사용할 브랜드 ID |
-| `productId` | O | 생성 결과를 연결할 상품 ID |
-| `brandMoodId` | O | 이미지 생성에 사용할 브랜드 무드 ID. 해당 무드의 `brandInstruction`이 최종 프롬프트 앞에 자동 삽입됨 |
-| `cutType` | O | `MODEL_CUT`, `PRODUCT_CUT` 등 컷 유형 |
-| `generationMode` | X | 현재는 `PARALLEL` 사용 |
-| `prompt` | O | 사용자 또는 샷 템플릿 기반 이미지 생성 요청 프롬프트 |
-| `negativePrompt` | X | 금지 프롬프트 기록용 |
-| `userOptionsJson` | X | 사용자 선택 옵션 JSON 문자열 |
-| `referenceJson` | X | 참조 이미지 정보 JSON 문자열. 상품 이미지는 `assets.id`, 서비스 제공 모델/포즈/배경은 `reference_assets.id` 사용 |
-| `requestedCount` | X | 생성 요청 수. 현재 테스트 단계에서는 1~4 |
+| --- | --- | --- |
+| `brandId` | Y | 브랜드 ID |
+| `productId` | Y | 상품 ID |
+| `brandMoodId` | Y | 저장된 브랜드 무드 ID |
+| `cutType` | Y | `MODEL_CUT` 또는 `PRODUCT_CUT` |
+| `generationMode` | N | 현재는 `PARALLEL` 사용 |
+| `prompt` | Y | 사용자 추가 요청 |
+| `negativePrompt` | N | 제외할 요소 |
+| `userOptionsJson` | N | 사용자 선택 옵션 JSON 문자열 |
+| `referenceJson` | N | 참조 이미지 정보 JSON 문자열 |
+| `requestedCount` | N | 생성 이미지 수. 1~4 |
 
-### referenceJson 구조
-
-`referenceJson`은 문자열 필드이므로 JSON을 문자열로 넣는다.
+### referenceJson 설명
 
 ```json
 {
-  "productImages": [1, 2],
-  "modelReferenceId": 3,
-  "poseReferenceId": 4,
-  "backgroundReferenceId": 5
+  "productImages": [101, 102],
+  "modelReferenceId": 1,
+  "poseReferenceId": 2,
+  "backgroundReferenceId": 3
 }
 ```
 
-`productImages`는 `assets.id`다. `modelReferenceId`, `poseReferenceId`, `backgroundReferenceId`는 서비스가 제공하는 `reference_assets.id`다.
+| 필드 | 넣는 값 |
+| --- | --- |
+| `productImages` | 상품 이미지 업로드 API 응답의 `assetId` 배열 |
+| `modelReferenceId` | 추천 모델 조회 API 응답의 `referenceAssetId` |
+| `poseReferenceId` | 추천 포즈 조회 API 응답의 `referenceAssetId` |
+| `backgroundReferenceId` | 추천 배경 조회 API 응답의 `referenceAssetId` |
 
-- `productImages`: 상품 정확도 기준 이미지. 배열 또는 단일 숫자 가능
-- `modelReferenceId`: 서비스 제공 모델 정체성 기준 이미지
-- `poseReferenceId`: 서비스 제공 포즈와 카메라 구도 기준 이미지
-- `backgroundReferenceId`: 서비스 제공 배경 무드 기준 이미지
-- `modelImage`, `poseImage`, `backgroundImage`: 사용자가 직접 업로드한 이미지처럼 `assets.id`를 써야 하는 경우에만 사용
+### Expected Response
 
-서버는 각 asset의 `object_name`으로 GCS 이미지를 읽고, Google AI 요청에 이미지 input으로 함께 전달한다.
-
-### Expected 201 Response
+Status: `201 Created`
 
 ```json
 {
-  "jobId": 1,
+  "jobId": 14,
   "status": "SUCCEEDED",
   "cutType": "MODEL_CUT",
   "generationMode": "PARALLEL",
   "aiName": "gemini-2.5-flash-image",
-  "requestedCount": 4,
-  "outputCount": 4,
-  "latencyMs": 12000,
+  "requestedCount": 1,
+  "outputCount": 1,
+  "latencyMs": 17386,
   "errorMessage": null,
   "results": [
     {
-      "resultId": 1,
-      "assetId": 10,
+      "resultId": 8,
+      "assetId": 14,
       "outputIndex": 0,
       "status": "GENERATED",
-      "imageUrl": "https://storage.googleapis.com/..."
-    },
-    {
-      "resultId": 2,
-      "assetId": 11,
-      "outputIndex": 1,
-      "status": "GENERATED",
-      "imageUrl": "https://storage.googleapis.com/..."
-    },
-    {
-      "resultId": 3,
-      "assetId": 12,
-      "outputIndex": 2,
-      "status": "GENERATED",
-      "imageUrl": "https://storage.googleapis.com/..."
-    },
-    {
-      "resultId": 4,
-      "assetId": 13,
-      "outputIndex": 3,
-      "status": "GENERATED",
-      "imageUrl": "https://storage.googleapis.com/..."
+      "imageUrl": "https://signed-url...",
+      "imageBase64": null
     }
   ]
 }
 ```
 
-## 3. 이미지 생성 결과 조회
+### 확인할 것
+
+- `status = SUCCEEDED`
+- `outputCount = requestedCount`
+- `results[].assetId` 존재
+- `results[].imageUrl`을 열었을 때 이미지가 보임
+
+## 9. 이미지 생성 결과 조회
+
+이미 생성된 job의 상태와 결과 이미지를 다시 조회한다.
 
 ### API
 
-| 기능 | Method | Endpoint |
-|---|---:|---|
-| 이미지 생성 결과 조회 | GET | `/image-generation/jobs/{jobId}` |
+| Method | Endpoint | 비용 |
+| --- | --- | --- |
+| `GET` | `/image-generation/jobs/{jobId}` | 없음 |
 
 ### Request
 
 ```http
-GET http://localhost:8080/image-generation/jobs/1
+GET http://localhost:8080/image-generation/jobs/14
 Cookie: accessToken={accessToken}
 ```
 
-### 확인
+### Expected Response
 
-- `status`가 `SUCCEEDED`인지 확인한다.
-- `outputCount`가 요청한 `requestedCount`와 같은지 확인한다.
-- `results[].assetId`가 존재하는지 확인한다.
-- `results[].imageUrl`을 브라우저에서 열었을 때 이미지가 보이는지 확인한다.
+`POST /image-generation/jobs` 응답과 같은 구조다.
 
-## 4. 라이브러리 저장 확인
+## 10. DB 확인
 
-현재 생성 결과는 `assets` 테이블에 자동 저장된다.
-
-### DB 확인
-
-`assets` 테이블에서 아래 조건으로 확인한다.
+### 업로드 이미지 확인
 
 ```sql
 select
     id,
     product_id,
     type,
+    asset_role,
+    status,
+    object_name,
+    original_filename,
+    created_at
+from assets
+where product_id = {productId}
+order by id desc;
+```
+
+기대값:
+
+- 업로드 이미지: `type = IMAGE`
+- 앞면 이미지: `asset_role = PRODUCT_FRONT`
+- 뒷면 이미지: `asset_role = PRODUCT_BACK`
+
+### 생성 이미지 자동 저장 확인
+
+```sql
+select
+    id,
+    product_id,
+    type,
+    asset_role,
     status,
     file_url,
     object_name,
@@ -296,34 +611,13 @@ order by id desc;
 
 기대값:
 
-- `type = GENERATED`
+- 생성 이미지: `type = GENERATED`
+- 생성 이미지 역할: `asset_role = GENERATED_RESULT`
 - `status = GENERATED`
-- `product_id`가 요청한 상품 ID와 동일
 - `object_name`이 `generated/{productId}/{jobId}/...` 형태
-- `prompt`에 브랜드 무드 지시문과 사용자 요청이 결합된 최종 프롬프트 저장
+- `prompt`에 브랜드 무드와 사용자 요청이 결합된 최종 프롬프트 저장
 
-### 이미지 생성 결과 테이블 확인
-
-```sql
-select
-    r.id,
-    r.job_id,
-    r.asset_id,
-    r.output_index,
-    r.status,
-    r.created_at
-from image_generation_results r
-where r.job_id = {jobId}
-order by r.output_index asc;
-```
-
-기대값:
-
-- `asset_id`가 `assets.id`와 연결됨
-- `output_index`가 `0`, `1` 순서로 저장됨
-- `status = GENERATED`
-
-### 이미지 생성 요청 테이블 확인
+### 이미지 생성 job 확인
 
 ```sql
 select
@@ -348,26 +642,54 @@ where id = {jobId};
 
 기대값:
 
-- `status = SUCCEEDED`
-- `requested_count = 2`
-- `output_count = 2`
-- `ai_name = gemini-2.5-flash-image`
-- `latency_ms`가 기록됨
+- 성공 시 `status = SUCCEEDED`
+- 실패 시 `status = FAILED`, `error_message`에 실패 원인 저장
+- `requested_count`와 `output_count` 확인
 
-## 5. 실패 케이스 테스트
+### 이미지 생성 결과 확인
 
-실패 케이스는 실제 생성 비용이 발생하지 않는 값 위주로 먼저 확인한다.
+```sql
+select
+    id,
+    job_id,
+    asset_id,
+    output_index,
+    status,
+    created_at
+from image_generation_results
+where job_id = {jobId}
+order by output_index asc;
+```
+
+기대값:
+
+- `asset_id`가 `assets.id`와 연결됨
+- `output_index`가 0부터 순서대로 저장됨
+- `status = GENERATED`
+
+## 11. 실패 케이스
 
 ### 인증 없이 요청
 
 ```http
-POST http://localhost:8080/image-generation/jobs
-Content-Type: application/json
+GET http://localhost:8080/assets/products/1/images
 ```
 
 기대값:
 
 - `401 Unauthorized`
+
+### files와 roles 개수 불일치
+
+예:
+
+- `files` 2개
+- `roles` 1개
+
+기대값:
+
+- `400 Bad Request`
+- 메시지: `이미지 파일 수와 이미지 역할 수가 일치해야 합니다.`
 
 ### requestedCount 5 요청
 
@@ -375,7 +697,7 @@ Content-Type: application/json
 {
   "brandId": 1,
   "productId": 1,
-  "brandMoodId": 1,
+  "brandMoodId": 3,
   "cutType": "MODEL_CUT",
   "prompt": "test",
   "requestedCount": 5
@@ -385,51 +707,25 @@ Content-Type: application/json
 기대값:
 
 - `400 Bad Request`
-- 현재 테스트 단계에서는 최대 4장까지만 허용
+- 메시지: `must be less than or equal to 4`
 
-### 존재하지 않는 상품 ID
-
-```json
-{
-  "brandId": 1,
-  "productId": 999999,
-  "brandMoodId": 1,
-  "cutType": "MODEL_CUT",
-  "prompt": "test",
-  "requestedCount": 1
-}
-```
+### 로그인 사용자 브랜드와 요청 브랜드 불일치
 
 기대값:
 
 - `400 Bad Request`
-- 상품을 찾을 수 없다는 에러
+- 메시지: `로그인 사용자의 브랜드와 요청 브랜드가 일치하지 않습니다.`
 
-### GOOGLE_AI_API_KEY 없이 생성 요청
+## 12. 비용 발생 여부 정리
 
-서버 환경변수에서 `GOOGLE_AI_API_KEY`를 제거하고 생성 요청을 보낸다.
+| API | 비용 |
+| --- | --- |
+| `POST /image-generation/jobs` | Google AI 이미지 생성 비용 발생 |
+| `POST /brands/{brandId}/moods/analyze` | Claude API 비용 발생 가능 |
+| `POST /brands/{brandId}/moods/analyze/pdf` | Claude API 비용 발생 가능 |
+| `POST /assets/products/{productId}/images` | 이미지 생성 비용 없음 |
+| `GET /assets/products/{productId}/images` | 없음 |
+| `GET /image-generation/reference-assets` | 없음 |
+| `GET /image-generation/options` | 없음 |
+| `GET /image-generation/jobs/{jobId}` | 없음 |
 
-기대값:
-
-- 이미지 생성 호출 전에 설정 오류 발생
-- `image_generation_jobs.status = FAILED`
-- `error_message`에 API key 미설정 메시지 저장
-
-## 6. 비용 주의
-
-아래 요청은 실제 Google AI 이미지 생성 API를 호출하므로 비용이 발생할 수 있다.
-
-- `POST /image-generation/jobs`
-
-아래 요청은 생성 API를 호출하지 않는다.
-
-- `GET /image-generation/jobs/{jobId}`
-- DB 조회
-- 로그인
-
-## 7. 이번 구현 API 목록
-
-| 기능명 | Method | Endpoint | 설명 |
-|---|---:|---|---|
-| 이미지 생성 요청 | POST | `/image-generation/jobs` | 브랜드 무드 지시문과 참조 이미지 역할 규칙을 프롬프트에 자동 반영한 뒤 Google AI 이미지 생성 요청, GCS 자동 저장, assets 자동 저장 |
-| 이미지 생성 결과 조회 | GET | `/image-generation/jobs/{jobId}` | 생성 Job 상태와 결과 이미지 signed URL 조회 |
