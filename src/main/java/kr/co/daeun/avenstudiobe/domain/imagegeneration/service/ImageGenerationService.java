@@ -297,6 +297,7 @@ public class ImageGenerationService {
                 The key names are critical:
 
                 productImages = GARMENT_REFERENCE
+                outfitItems = OUTFIT_PRODUCT_REFERENCES
                 modelImage = MODEL_REFERENCE
                 poseImage = POSE_COMPOSITION_REFERENCE
                 backgroundImage = BACKGROUND_REFERENCE
@@ -305,6 +306,7 @@ public class ImageGenerationService {
 
                 Each reference image has a different role:
                 GARMENT_REFERENCE is the product accuracy reference for the garment the final model must wear.
+                OUTFIT_PRODUCT_REFERENCES are product references selected for this generation request. Each item has its own request role and wearing part.
                 MODEL_REFERENCE is the identity reference for the final person.
                 POSE_COMPOSITION_REFERENCE is the body pose and camera composition reference.
                 BACKGROUND_REFERENCE is the spatial mood and atmosphere reference for the final scene.
@@ -316,11 +318,13 @@ public class ImageGenerationService {
 
                 Priority order:
                 1. GARMENT_REFERENCE product accuracy
-                2. MODEL_REFERENCE identity consistency
-                3. POSE_COMPOSITION_REFERENCE body pose structure
-                4. BACKGROUND_REFERENCE spatial mood and atmosphere
-                5. Brand mood
-                6. User selected mood options
+                2. PRIMARY outfit item accuracy
+                3. STYLING outfit item consistency
+                4. MODEL_REFERENCE identity consistency
+                5. POSE_COMPOSITION_REFERENCE body pose structure
+                6. BACKGROUND_REFERENCE spatial mood and atmosphere
+                7. Brand mood
+                8. User selected mood options
                 """;
     }
 
@@ -351,6 +355,16 @@ public class ImageGenerationService {
                 Do not change the product category.
                 Do not change the product color.
                 Do not add pockets, zippers, buttons, labels, graphics, patterns, decorations, or logos that are not visible in productImages.
+
+                outfitItems = OUTFIT_PRODUCT_REFERENCES.
+                outfitItems are products selected for this generation request.
+                A product can be PRIMARY in one request and STYLING in another request. Do not treat styling role as a fixed product property.
+                Each outfit item includes a request role and wearing part.
+                PRIMARY items are the most important products to preserve accurately in the final outfit.
+                STYLING items are additional owned-brand products that should be naturally worn together with the PRIMARY item.
+                Apply each outfit item only to its wearing part such as TOP, BOTTOM, OUTER, DRESS, SHOES, BAG, HAT, or ACCESSORY.
+                Do not merge one outfit item into the wrong body part.
+                Do not invent a different product category for an outfit item.
 
                 modelImage = MODEL_REFERENCE.
                 modelImage is the identity reference. The final person should look like the same person as modelImage.
@@ -391,6 +405,7 @@ public class ImageGenerationService {
         }
 
         List<ReferenceAssetInput> references = new ArrayList<>();
+        addOutfitItems(references, root.path("outfitItems"));
         addProductImages(references, root.path("productImages"));
         addSingleReference(references, "modelImage", root.path("modelImage"));
         addSingleReference(references, "poseImage", root.path("poseImage"));
@@ -505,6 +520,76 @@ public class ImageGenerationService {
         }
 
         throw new IllegalArgumentException("referenceJson에는 assetId 숫자 또는 {\"assetId\": number} 형식만 사용할 수 있습니다.");
+    }
+
+    private void addOutfitItems(List<ReferenceAssetInput> references, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        if (!node.isArray()) {
+            throw new IllegalArgumentException("outfitItems는 배열 형식이어야 합니다.");
+        }
+
+        int index = 0;
+        for (JsonNode item : node) {
+            String role = normalizeOutfitItemValue(item.path("role").asText("STYLING"));
+            String wearingPart = normalizeOutfitItemValue(item.path("wearingPart").asText("UNSPECIFIED"));
+            Long productId = item.path("productId").isNumber() ? item.path("productId").asLong() : null;
+            JsonNode assetIds = item.path("assetIds");
+
+            if (assetIds == null || assetIds.isMissingNode() || assetIds.isNull()) {
+                throw new IllegalArgumentException("outfitItems.assetIds를 입력해주세요.");
+            }
+
+            if (assetIds.isArray()) {
+                int assetIndex = 0;
+                for (JsonNode assetId : assetIds) {
+                    addOutfitItemReference(references, index, assetIndex, role, wearingPart, productId, assetId);
+                    assetIndex++;
+                }
+            } else {
+                addOutfitItemReference(references, index, 0, role, wearingPart, productId, assetIds);
+            }
+
+            index++;
+        }
+    }
+
+    private void addOutfitItemReference(
+            List<ReferenceAssetInput> references,
+            int itemIndex,
+            int assetIndex,
+            String role,
+            String wearingPart,
+            Long productId,
+            JsonNode node
+    ) {
+        Long assetId = extractAssetId(node);
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new IllegalArgumentException("착장 상품 이미지를 찾을 수 없습니다. assetId=" + assetId));
+
+        references.add(new ReferenceAssetInput(
+                "outfitItems[" + itemIndex + "].assetIds[" + assetIndex + "]",
+                "outfitItem role=" + role
+                        + ", wearingPart=" + wearingPart
+                        + ", productId=" + nullToText(productId)
+                        + ", assetId " + asset.getId(),
+                gcsService.download(asset.getObjectName()),
+                asset.getContentType()
+        ));
+    }
+
+    private String normalizeOutfitItemValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNSPECIFIED";
+        }
+
+        return value.trim().toUpperCase();
+    }
+
+    private String nullToText(Long value) {
+        return value == null ? "UNSPECIFIED" : value.toString();
     }
 
     private List<GoogleAiImageProvider.ReferenceImage> toProviderReferenceImages(
