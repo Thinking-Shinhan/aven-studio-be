@@ -50,6 +50,7 @@ create table if not exists products (
 create table if not exists assets (
     id bigserial primary key,
     type varchar(30) not null,
+    asset_role varchar(30),
     file_url varchar(500) not null,
     object_name varchar(500) not null,
     original_filename varchar(255),

@@ -71,7 +71,70 @@ Postman에서는 로그인 요청 후 쿠키가 자동 저장되면 그대로 �
 Cookie: accessToken={accessToken}
 ```
 
-## 2. 이미지 생성 요청
+## 2. 상품 이미지 업로드
+
+### API
+
+| 기능 | Method | Endpoint |
+|---|---:|---|
+| 상품 이미지 업로드 | POST | `/assets/products/{productId}/images` |
+
+### Request
+
+```http
+POST http://localhost:8080/assets/products/1/images
+Content-Type: multipart/form-data
+Cookie: accessToken={accessToken}
+```
+
+Postman `form-data` 기준:
+
+| Key | Type | Value |
+|---|---|---|
+| `files` | File | front.png |
+| `roles` | Text | PRODUCT_FRONT |
+| `files` | File | back.png |
+| `roles` | Text | PRODUCT_BACK |
+
+`files`와 `roles`는 같은 순서로 매칭된다. 예를 들어 첫 번째 파일은 `PRODUCT_FRONT`, 두 번째 파일은 `PRODUCT_BACK`으로 저장된다.
+
+권장 role:
+
+| role | 설명 |
+|---|---|
+| `PRODUCT_FRONT` | 상품 앞면 |
+| `PRODUCT_BACK` | 상품 뒷면 |
+| `COORDINATION_ITEM` | 코디용 하의, 신발 등 |
+| `DETAIL` | 디테일 이미지 |
+
+### Expected 201 Response
+
+```json
+[
+  {
+    "assetId": 1,
+    "assetRole": "PRODUCT_FRONT",
+    "imageUrl": "https://storage.googleapis.com/...",
+    "objectName": "products/1/...",
+    "originalFilename": "front.png",
+    "contentType": "image/png",
+    "size": 123456
+  },
+  {
+    "assetId": 2,
+    "assetRole": "PRODUCT_BACK",
+    "imageUrl": "https://storage.googleapis.com/...",
+    "objectName": "products/1/...",
+    "originalFilename": "back.png",
+    "contentType": "image/png",
+    "size": 123456
+  }
+]
+```
+
+이미지 생성 요청의 `referenceJson.productImages`에는 여기서 받은 `assetId`를 넣는다.
+
+## 3. 이미지 생성 요청
 
 ### API
 

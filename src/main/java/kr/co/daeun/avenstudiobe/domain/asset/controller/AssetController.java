@@ -36,6 +36,7 @@ public class AssetController {
     public ResponseEntity<List<ProductAssetRespDto>> uploadProductImages(
             @PathVariable Long productId,
             @RequestParam("files") List<MultipartFile> files,
+            @RequestParam("roles") List<String> roles,
             Authentication authentication
     ) {
         if (files == null || files.isEmpty()) {
@@ -43,11 +44,12 @@ public class AssetController {
         }
 
         Product product = getAccessibleProduct(productId, authentication);
-        List<Asset> assets = assetService.uploadProductImages(files, product);
+        List<Asset> assets = assetService.uploadProductImages(files, roles, product);
 
         List<ProductAssetRespDto> response = assets.stream()
                 .map(asset -> new ProductAssetRespDto(
                         asset.getId(),
+                        asset.getAssetRole(),
                         asset.getFileUrl(),
                         asset.getObjectName(),
                         asset.getOriginalFilename(),
@@ -70,6 +72,7 @@ public class AssetController {
         List<ProductAssetRespDto> response = assetService.getProductImages(productId).stream()
                 .map(asset -> new ProductAssetRespDto(
                         asset.assetId(),
+                        asset.assetRole(),
                         asset.imageUrl(),
                         asset.objectName(),
                         asset.originalFilename(),
