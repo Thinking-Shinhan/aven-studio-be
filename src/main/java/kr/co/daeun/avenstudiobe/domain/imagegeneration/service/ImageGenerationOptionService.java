@@ -6,12 +6,18 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetListRes
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateListRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateRespDto;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ImageGenerationOptionService {
+
+    private final ReferenceAssetRepository referenceAssetRepository;
 
     public ImageGenerationOptionsRespDto getOptions() {
         return new ImageGenerationOptionsRespDto(
@@ -67,8 +73,12 @@ public class ImageGenerationOptionService {
     public ReferenceAssetListRespDto getReferenceAssets(String assetType) {
         String normalizedAssetType = normalizeAssetType(assetType);
 
-        List<ReferenceAssetRespDto> assets = referenceAssets().stream()
-                .filter(asset -> normalizedAssetType == null || normalizedAssetType.equals(asset.getAssetType()))
+        List<ReferenceAsset> referenceAssets = normalizedAssetType == null
+                ? referenceAssetRepository.findByActiveTrueOrderBySortOrderAscIdAsc()
+                : referenceAssetRepository.findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc(normalizedAssetType);
+
+        List<ReferenceAssetRespDto> assets = referenceAssets.stream()
+                .map(this::toReferenceAssetResponse)
                 .toList();
 
         return new ReferenceAssetListRespDto(normalizedAssetType, assets);
@@ -98,24 +108,6 @@ public class ImageGenerationOptionService {
                 shot("BACK_STANDING", "후면", "MODEL_CUT", "모델의 후면 실루엣과 상품 뒷면이 보이는 착용컷으로 생성한다.", "후면 핏 확인용"),
                 shot("WALKING", "워킹", "MODEL_CUT", "모델이 자연스럽게 걷는 활동감 있는 착용컷으로 생성한다.", "활동감 확인용"),
                 shot("SITTING", "앉기", "MODEL_CUT", "모델이 앉아 있는 자세의 착용컷으로 생성한다.", "착석 핏 확인용")
-        );
-    }
-
-    private List<ReferenceAssetRespDto> referenceAssets() {
-        return List.of(
-                referenceAsset("MODEL_RECOMMENDED_01", "MODEL", "추천 모델 1", "서비스가 제공하는 기본 AI 모델", null),
-                referenceAsset("MODEL_UPLOAD", "MODEL", "모델 이미지 업로드", "사용자가 직접 업로드하는 모델 참조 이미지", null),
-                referenceAsset("BACKGROUND_STUDIO", "BACKGROUND", "스튜디오", "깔끔한 스튜디오 배경", null),
-                referenceAsset("BACKGROUND_WHITE", "BACKGROUND", "화이트", "흰색 단색 배경", null),
-                referenceAsset("BACKGROUND_BLACK", "BACKGROUND", "블랙", "검정 단색 배경", null),
-                referenceAsset("BACKGROUND_NATURE", "BACKGROUND", "자연", "자연 분위기의 배경", null),
-                referenceAsset("BACKGROUND_CITY", "BACKGROUND", "도시", "도시적인 배경", null),
-                referenceAsset("BACKGROUND_UPLOAD", "BACKGROUND", "배경 이미지 업로드", "사용자가 직접 업로드하는 배경 참조 이미지", null),
-                referenceAsset("POSE_FRONT", "POSE", "정면", "정면 포즈 참조 이미지", null),
-                referenceAsset("POSE_SIDE", "POSE", "측면", "측면 포즈 참조 이미지", null),
-                referenceAsset("POSE_BACK", "POSE", "후면", "후면 포즈 참조 이미지", null),
-                referenceAsset("POSE_WALKING", "POSE", "워킹", "걷는 포즈 참조 이미지", null),
-                referenceAsset("POSE_SITTING", "POSE", "앉기", "앉은 포즈 참조 이미지", null)
         );
     }
 
@@ -155,13 +147,14 @@ public class ImageGenerationOptionService {
         return new ShotTemplateRespDto(key, label, cutType, promptText, description);
     }
 
-    private ReferenceAssetRespDto referenceAsset(
-            String key,
-            String assetType,
-            String label,
-            String description,
-            String imageUrl
-    ) {
-        return new ReferenceAssetRespDto(key, assetType, label, description, imageUrl);
+    private ReferenceAssetRespDto toReferenceAssetResponse(ReferenceAsset referenceAsset) {
+        return new ReferenceAssetRespDto(
+                referenceAsset.getId(),
+                referenceAsset.getReferenceKey(),
+                referenceAsset.getReferenceType(),
+                referenceAsset.getName(),
+                referenceAsset.getDescription(),
+                referenceAsset.getImageUrl()
+        );
     }
 }

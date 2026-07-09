@@ -71,7 +71,70 @@ Postman에서는 로그인 요청 후 쿠키가 자동 저장되면 그대로 �
 Cookie: accessToken={accessToken}
 ```
 
-## 2. 이미지 생성 요청
+## 2. 상품 이미지 업로드
+
+### API
+
+| 기능 | Method | Endpoint |
+|---|---:|---|
+| 상품 이미지 업로드 | POST | `/assets/products/{productId}/images` |
+
+### Request
+
+```http
+POST http://localhost:8080/assets/products/1/images
+Content-Type: multipart/form-data
+Cookie: accessToken={accessToken}
+```
+
+Postman `form-data` 기준:
+
+| Key | Type | Value |
+|---|---|---|
+| `files` | File | front.png |
+| `roles` | Text | PRODUCT_FRONT |
+| `files` | File | back.png |
+| `roles` | Text | PRODUCT_BACK |
+
+`files`와 `roles`는 같은 순서로 매칭된다. 예를 들어 첫 번째 파일은 `PRODUCT_FRONT`, 두 번째 파일은 `PRODUCT_BACK`으로 저장된다.
+
+권장 role:
+
+| role | 설명 |
+|---|---|
+| `PRODUCT_FRONT` | 상품 앞면 |
+| `PRODUCT_BACK` | 상품 뒷면 |
+| `COORDINATION_ITEM` | 코디용 하의, 신발 등 |
+| `DETAIL` | 디테일 이미지 |
+
+### Expected 201 Response
+
+```json
+[
+  {
+    "assetId": 1,
+    "assetRole": "PRODUCT_FRONT",
+    "imageUrl": "https://storage.googleapis.com/...",
+    "objectName": "products/1/...",
+    "originalFilename": "front.png",
+    "contentType": "image/png",
+    "size": 123456
+  },
+  {
+    "assetId": 2,
+    "assetRole": "PRODUCT_BACK",
+    "imageUrl": "https://storage.googleapis.com/...",
+    "objectName": "products/1/...",
+    "originalFilename": "back.png",
+    "contentType": "image/png",
+    "size": 123456
+  }
+]
+```
+
+이미지 생성 요청의 `referenceJson.productImages`에는 여기서 받은 `assetId`를 넣는다.
+
+## 3. 이미지 생성 요청
 
 ### API
 
@@ -97,7 +160,7 @@ Cookie: accessToken={accessToken}
   "prompt": "프리미엄 패션 이커머스 모델컷을 생성한다. 상품의 색상과 형태를 유지한다. 최종 결과에는 한 명의 모델만 등장해야 하며 텍스트, 워터마크, 콜라주를 만들지 않는다.",
   "negativePrompt": "cheap ecommerce, neon, watermark, text overlay, collage",
   "userOptionsJson": "{\"colorTemperature\":\"cool\",\"cameraAngle\":\"eye_level_front\",\"framing\":\"full_body\"}",
-  "referenceJson": "{\"productImages\":[1,2],\"modelImage\":3,\"poseImage\":4,\"backgroundImage\":5}",
+  "referenceJson": "{\"productImages\":[1,2],\"modelReferenceId\":3,\"poseReferenceId\":4,\"backgroundReferenceId\":5}",
   "requestedCount": 4
 }
 ```
@@ -114,7 +177,7 @@ Cookie: accessToken={accessToken}
 | `prompt` | O | 사용자 또는 샷 템플릿 기반 이미지 생성 요청 프롬프트 |
 | `negativePrompt` | X | 금지 프롬프트 기록용 |
 | `userOptionsJson` | X | 사용자 선택 옵션 JSON 문자열 |
-| `referenceJson` | X | 참조 이미지 assetId 정보 JSON 문자열. `productImages`, `modelImage`, `poseImage`, `backgroundImage` 지원 |
+| `referenceJson` | X | 참조 이미지 정보 JSON 문자열. 상품 이미지는 `assets.id`, 서비스 제공 모델/포즈/배경은 `reference_assets.id` 사용 |
 | `requestedCount` | X | 생성 요청 수. 현재 테스트 단계에서는 1~4 |
 
 ### referenceJson 구조
@@ -124,18 +187,19 @@ Cookie: accessToken={accessToken}
 ```json
 {
   "productImages": [1, 2],
-  "modelImage": 3,
-  "poseImage": 4,
-  "backgroundImage": 5
+  "modelReferenceId": 3,
+  "poseReferenceId": 4,
+  "backgroundReferenceId": 5
 }
 ```
 
-각 값은 `assets.id`다.
+`productImages`는 `assets.id`다. `modelReferenceId`, `poseReferenceId`, `backgroundReferenceId`는 서비스가 제공하는 `reference_assets.id`다.
 
 - `productImages`: 상품 정확도 기준 이미지. 배열 또는 단일 숫자 가능
-- `modelImage`: 모델 정체성 기준 이미지
-- `poseImage`: 포즈와 카메라 구도 기준 이미지
-- `backgroundImage`: 배경 무드 기준 이미지
+- `modelReferenceId`: 서비스 제공 모델 정체성 기준 이미지
+- `poseReferenceId`: 서비스 제공 포즈와 카메라 구도 기준 이미지
+- `backgroundReferenceId`: 서비스 제공 배경 무드 기준 이미지
+- `modelImage`, `poseImage`, `backgroundImage`: 사용자가 직접 업로드한 이미지처럼 `assets.id`를 써야 하는 경우에만 사용
 
 서버는 각 asset의 `object_name`으로 GCS 이미지를 읽고, Google AI 요청에 이미지 input으로 함께 전달한다.
 
