@@ -47,6 +47,29 @@ public class GcsService {
         }
     }
 
+    public UploadedFile uploadReferenceAsset(MultipartFile file, String referenceType) {
+        validateImage(file);
+
+        try {
+            String extension = getExtension(file.getOriginalFilename());
+            String normalizedReferenceType = referenceType.toLowerCase();
+            String objectName = "reference-assets/" + normalizedReferenceType + "/" + UUID.randomUUID() + extension;
+
+            BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+                    .setContentType(file.getContentType())
+                    .build();
+
+            storage.create(blobInfo, file.getInputStream());
+
+            String fileUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectName;
+
+            return new UploadedFile(fileUrl, objectName, file.getOriginalFilename(), file.getContentType(), file.getSize());
+
+        } catch (IOException e) {
+            throw new RuntimeException("레퍼런스 이미지 업로드에 실패했습니다.", e);
+        }
+    }
+
     public UploadedFile uploadGeneratedImage(byte[] bytes, String contentType, Long productId, Long jobId) {
         validateGeneratedImage(bytes, contentType);
 
