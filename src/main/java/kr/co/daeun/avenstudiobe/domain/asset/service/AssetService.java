@@ -186,16 +186,20 @@ public class AssetService {
         List<Asset> assets = assetRepository.findByProductIdOrderByIdDesc(productId);
 
         return assets.stream()
-                .map(asset -> new AssetImageResult(
-                        asset.getId(),
-                        asset.getAssetRole(),
-                        gcsService.generateSignedUrl(asset.getObjectName()),
-                        asset.getObjectName(),
-                        asset.getOriginalFilename(),
-                        asset.getContentType(),
-                        asset.getSize()
-                ))
+                .map(this::toAssetImageResult)
                 .toList();
+    }
+
+    public AssetImageResult toAssetImageResult(Asset asset) {
+        return new AssetImageResult(
+                asset.getId(),
+                asset.getAssetRole(),
+                gcsService.generateSignedUrl(asset.getObjectName()),
+                asset.getObjectName(),
+                asset.getOriginalFilename(),
+                asset.getContentType(),
+                asset.getSize()
+        );
     }
 
     @Transactional(readOnly = true)
