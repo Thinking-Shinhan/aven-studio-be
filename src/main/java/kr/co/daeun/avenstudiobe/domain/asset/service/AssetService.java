@@ -129,6 +129,15 @@ public class AssetService {
         assetRepository.delete(asset);
     }
 
+    @Transactional
+    public void deleteAssetByIdAndBrandId(Long assetId, Long brandId) {
+        Asset asset = assetRepository.findByIdAndProduct_Brand_Id(assetId, brandId)
+                .orElseThrow(() -> new IllegalArgumentException("이미지가 존재하지 않거나 접근 권한이 없습니다."));
+
+        gcsService.delete(asset.getObjectName());
+        assetRepository.delete(asset);
+    }
+
     @Transactional(readOnly = true)
     public List<AssetImageResult> getProductImages(Long productId) {
         List<Asset> assets = assetRepository.findByProductIdOrderByIdDesc(productId);
@@ -137,6 +146,7 @@ public class AssetService {
                 .map(asset -> new AssetImageResult(
                         asset.getId(),
                         gcsService.generateSignedUrl(asset.getObjectName()),
+                        asset.getObjectName(),
                         asset.getOriginalFilename(),
                         asset.getContentType(),
                         asset.getSize()
@@ -161,6 +171,7 @@ public class AssetService {
     public record AssetImageResult(
             Long assetId,
             String imageUrl,
+            String objectName,
             String originalFilename,
             String contentType,
             long size
