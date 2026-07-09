@@ -47,15 +47,8 @@ public class AssetController {
         List<Asset> assets = assetService.uploadProductImages(files, roles, product);
 
         List<ProductAssetRespDto> response = assets.stream()
-                .map(asset -> new ProductAssetRespDto(
-                        asset.getId(),
-                        asset.getAssetRole(),
-                        asset.getFileUrl(),
-                        asset.getObjectName(),
-                        asset.getOriginalFilename(),
-                        asset.getContentType(),
-                        asset.getSize()
-                ))
+                .map(assetService::toAssetImageResult)
+                .map(this::toProductAssetResponse)
                 .toList();
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -70,15 +63,7 @@ public class AssetController {
         getAccessibleProduct(productId, authentication);
 
         List<ProductAssetRespDto> response = assetService.getProductImages(productId).stream()
-                .map(asset -> new ProductAssetRespDto(
-                        asset.assetId(),
-                        asset.assetRole(),
-                        asset.imageUrl(),
-                        asset.objectName(),
-                        asset.originalFilename(),
-                        asset.contentType(),
-                        asset.size()
-                ))
+                .map(this::toProductAssetResponse)
                 .toList();
 
         return ResponseEntity.ok(response);
@@ -100,5 +85,17 @@ public class AssetController {
 
         return productRepository.findByIdAndBrand_Id(productId, user.getBrand().getId())
                 .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
+    }
+
+    private ProductAssetRespDto toProductAssetResponse(AssetService.AssetImageResult asset) {
+        return new ProductAssetRespDto(
+                asset.assetId(),
+                asset.assetRole(),
+                asset.imageUrl(),
+                asset.objectName(),
+                asset.originalFilename(),
+                asset.contentType(),
+                asset.size()
+        );
     }
 }
