@@ -15,7 +15,9 @@ import kr.co.daeun.avenstudiobe.integration.anthropic.AnthropicMoodClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @Service
@@ -23,6 +25,7 @@ import java.util.List;
 public class BrandMoodService {
 
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
+    private static final long MAX_PDF_SIZE_BYTES = 20L * 1024 * 1024;
 
     private final BrandMoodRepository brandMoodRepository;
     private final BrandRepository brandRepository;
@@ -36,12 +39,46 @@ public class BrandMoodService {
         String systemPrompt = buildAnalyzeSystemPrompt();
         String userPrompt = buildAnalyzeUserPrompt(brand, request);
         String claudeText = anthropicMoodClient.analyzeBrandMood(systemPrompt, userPrompt);
-        String jsonText = extractJsonObject(claudeText);
+        return parseAnalysisResponse(request, claudeText, "TEXT");
+    }
 
+    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
+        Brand brand = findBrand(brandId);
+        validateBrandOwner(user, brandId);
+        validatePdf(file);
+
+        String systemPrompt = buildAnalyzeSystemPrompt();
+        String userPrompt = buildAnalyzeUserPrompt(brand, request);
+        String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
+        return parseAnalysisResponse(request, claudeText, "PDF");
+    }
+
+    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, String requestJson, MultipartFile file, User user) {
+        return analyzePdf(brandId, parseAnalyzeRequest(requestJson), file, user);
+    }
+
+    private BrandMoodAnalyzeReqDto parseAnalyzeRequest(String requestJson) {
+        if (requestJson == null || requestJson.isBlank()) {
+            throw new IllegalArgumentException("request JSON을 입력해주세요.");
+        }
+
+        try {
+            return objectMapper.readValue(requestJson, BrandMoodAnalyzeReqDto.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("request JSON 형식이 올바르지 않습니다.", e);
+        }
+    }
+
+    private BrandMoodAnalysisRespDto parseAnalysisResponse(
+            BrandMoodAnalyzeReqDto request,
+            String claudeText,
+            String defaultSourceType
+    ) {
+        String jsonText = extractJsonObject(claudeText);
         try {
             BrandMoodAnalysisRespDto analysis = objectMapper.readValue(jsonText, BrandMoodAnalysisRespDto.class);
             return new BrandMoodAnalysisRespDto(
-                    defaultIfBlank(request.getSourceType(), "TEXT"),
+                    defaultIfBlank(request.getSourceType(), defaultSourceType),
                     normalizeSourceUrl(request.getSourceUrl()),
                     analysis.getBrandSummary(),
                     analysis.getDesignPhilosophy(),
@@ -208,7 +245,7 @@ public class BrandMoodService {
     private String buildAnalyzeUserPrompt(Brand brand, BrandMoodAnalyzeReqDto request) {
         String sourceText = request.getSourceText();
         if (sourceText == null || sourceText.isBlank()) {
-            sourceText = "제공된 본문 없음. sourceUrl과 브랜드명만 참고하고, 확실하지 않은 항목은 null 또는 빈 배열로 둔다.";
+            sourceText = "제공된 본문 없음. 첨부 PDF, sourceUrl, 브랜드명만 참고하고, 확실하지 않은 항목은 null 또는 빈 배열로 둔다.";
         }
 
         return """
@@ -234,6 +271,33 @@ public class BrandMoodService {
                 sourceText,
                 nullToEmpty(request.getCustomInstruction())
         );
+    }
+
+    private void validatePdf(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("분석할 PDF 파일을 첨부해주세요.");
+        }
+
+        if (file.getSize() > MAX_PDF_SIZE_BYTES) {
+            throw new IllegalArgumentException("PDF 파일은 20MB 이하만 첨부할 수 있습니다.");
+        }
+
+        String contentType = file.getContentType();
+        String filename = file.getOriginalFilename();
+        boolean pdfContentType = "application/pdf".equalsIgnoreCase(contentType);
+        boolean pdfExtension = filename != null && filename.toLowerCase().endsWith(".pdf");
+
+        if (!pdfContentType && !pdfExtension) {
+            throw new IllegalArgumentException("PDF 파일만 첨부할 수 있습니다.");
+        }
+    }
+
+    private byte[] readPdf(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("PDF 파일을 읽는 중 오류가 발생했습니다.", e);
+        }
     }
 
     private String extractJsonObject(String text) {

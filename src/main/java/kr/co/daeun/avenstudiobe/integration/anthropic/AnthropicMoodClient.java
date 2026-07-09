@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +30,18 @@ public class AnthropicMoodClient {
     private final RestClient restClient = RestClient.create();
 
     public String analyzeBrandMood(String systemPrompt, String userPrompt) {
+        return requestAnalysis(systemPrompt, userPrompt, null);
+    }
+
+    public String analyzeBrandMoodWithPdf(String systemPrompt, String userPrompt, byte[] pdfBytes) {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            throw new IllegalArgumentException("PDF 파일이 비어 있습니다.");
+        }
+
+        return requestAnalysis(systemPrompt, userPrompt, pdfBytes);
+    }
+
+    private String requestAnalysis(String systemPrompt, String userPrompt, byte[] pdfBytes) {
         validateApiKey();
 
         Map<String, Object> requestBody = Map.of(
@@ -38,7 +51,7 @@ public class AnthropicMoodClient {
                 "system", systemPrompt,
                 "messages", List.of(Map.of(
                         "role", "user",
-                        "content", userPrompt
+                        "content", buildUserContent(userPrompt, pdfBytes)
                 ))
         );
 
@@ -61,6 +74,27 @@ public class AnthropicMoodClient {
         }
 
         return extractText(response);
+    }
+
+    private Object buildUserContent(String userPrompt, byte[] pdfBytes) {
+        if (pdfBytes == null) {
+            return userPrompt;
+        }
+
+        return List.of(
+                Map.of(
+                        "type", "document",
+                        "source", Map.of(
+                                "type", "base64",
+                                "media_type", "application/pdf",
+                                "data", Base64.getEncoder().encodeToString(pdfBytes)
+                        )
+                ),
+                Map.of(
+                        "type", "text",
+                        "text", userPrompt
+                )
+        );
     }
 
     public String getModel() {

@@ -6,12 +6,22 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetListRes
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateListRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateRespDto;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ImageGenerationOptionService {
+
+    private final ReferenceAssetRepository referenceAssetRepository;
+    private final GcsService gcsService;
 
     public ImageGenerationOptionsRespDto getOptions() {
         return new ImageGenerationOptionsRespDto(
@@ -67,11 +77,55 @@ public class ImageGenerationOptionService {
     public ReferenceAssetListRespDto getReferenceAssets(String assetType) {
         String normalizedAssetType = normalizeAssetType(assetType);
 
-        List<ReferenceAssetRespDto> assets = referenceAssets().stream()
-                .filter(asset -> normalizedAssetType == null || normalizedAssetType.equals(asset.getAssetType()))
+        List<ReferenceAsset> referenceAssets = normalizedAssetType == null
+                ? referenceAssetRepository.findByActiveTrueOrderBySortOrderAscIdAsc()
+                : referenceAssetRepository.findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc(normalizedAssetType);
+
+        List<ReferenceAssetRespDto> assets = referenceAssets.stream()
+                .map(this::toReferenceAssetResponse)
                 .toList();
 
         return new ReferenceAssetListRespDto(normalizedAssetType, assets);
+    }
+
+    @Transactional
+    public ReferenceAssetRespDto uploadReferenceAsset(
+            MultipartFile file,
+            String assetType,
+            String key,
+            String label,
+            String description,
+            Integer sortOrder
+    ) {
+        String normalizedAssetType = normalizeRequiredAssetType(assetType);
+        String normalizedKey = normalizeReferenceKey(key);
+        String normalizedLabel = normalizeLabel(label);
+
+        if (referenceAssetRepository.existsByReferenceKey(normalizedKey)) {
+            throw new IllegalArgumentException("이미 사용 중인 레퍼런스 에셋 key입니다.");
+        }
+
+        GcsService.UploadedFile uploaded = gcsService.uploadReferenceAsset(file, normalizedAssetType);
+
+        try {
+            ReferenceAsset referenceAsset = ReferenceAsset.builder()
+                    .referenceType(normalizedAssetType)
+                    .referenceKey(normalizedKey)
+                    .name(normalizedLabel)
+                    .imageUrl(uploaded.fileUrl())
+                    .objectName(uploaded.objectName())
+                    .contentType(uploaded.contentType())
+                    .description(description)
+                    .active(true)
+                    .sortOrder(sortOrder == null ? 0 : sortOrder)
+                    .build();
+
+            return toReferenceAssetResponse(referenceAssetRepository.save(referenceAsset));
+
+        } catch (RuntimeException e) {
+            gcsService.deleteQuietly(uploaded.objectName());
+            throw e;
+        }
     }
 
     private List<ShotTemplateRespDto> productCutShotTemplates() {
@@ -101,24 +155,6 @@ public class ImageGenerationOptionService {
         );
     }
 
-    private List<ReferenceAssetRespDto> referenceAssets() {
-        return List.of(
-                referenceAsset("MODEL_RECOMMENDED_01", "MODEL", "추천 모델 1", "서비스가 제공하는 기본 AI 모델", null),
-                referenceAsset("MODEL_UPLOAD", "MODEL", "모델 이미지 업로드", "사용자가 직접 업로드하는 모델 참조 이미지", null),
-                referenceAsset("BACKGROUND_STUDIO", "BACKGROUND", "스튜디오", "깔끔한 스튜디오 배경", null),
-                referenceAsset("BACKGROUND_WHITE", "BACKGROUND", "화이트", "흰색 단색 배경", null),
-                referenceAsset("BACKGROUND_BLACK", "BACKGROUND", "블랙", "검정 단색 배경", null),
-                referenceAsset("BACKGROUND_NATURE", "BACKGROUND", "자연", "자연 분위기의 배경", null),
-                referenceAsset("BACKGROUND_CITY", "BACKGROUND", "도시", "도시적인 배경", null),
-                referenceAsset("BACKGROUND_UPLOAD", "BACKGROUND", "배경 이미지 업로드", "사용자가 직접 업로드하는 배경 참조 이미지", null),
-                referenceAsset("POSE_FRONT", "POSE", "정면", "정면 포즈 참조 이미지", null),
-                referenceAsset("POSE_SIDE", "POSE", "측면", "측면 포즈 참조 이미지", null),
-                referenceAsset("POSE_BACK", "POSE", "후면", "후면 포즈 참조 이미지", null),
-                referenceAsset("POSE_WALKING", "POSE", "워킹", "걷는 포즈 참조 이미지", null),
-                referenceAsset("POSE_SITTING", "POSE", "앉기", "앉은 포즈 참조 이미지", null)
-        );
-    }
-
     private String normalizeCutType(String cutType) {
         if (cutType == null || cutType.isBlank()) {
             return "PRODUCT_CUT";
@@ -138,6 +174,14 @@ public class ImageGenerationOptionService {
             return null;
         }
 
+        return normalizeRequiredAssetType(assetType);
+    }
+
+    private String normalizeRequiredAssetType(String assetType) {
+        if (assetType == null || assetType.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 유형을 입력해주세요.");
+        }
+
         String normalizedAssetType = assetType.trim().toUpperCase();
 
         if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE").contains(normalizedAssetType)) {
@@ -145,6 +189,22 @@ public class ImageGenerationOptionService {
         }
 
         return normalizedAssetType;
+    }
+
+    private String normalizeReferenceKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 key를 입력해주세요.");
+        }
+
+        return key.trim();
+    }
+
+    private String normalizeLabel(String label) {
+        if (label == null || label.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 이름을 입력해주세요.");
+        }
+
+        return label.trim();
     }
 
     private OptionRespDto option(String key, String label, String description) {
@@ -155,13 +215,22 @@ public class ImageGenerationOptionService {
         return new ShotTemplateRespDto(key, label, cutType, promptText, description);
     }
 
-    private ReferenceAssetRespDto referenceAsset(
-            String key,
-            String assetType,
-            String label,
-            String description,
-            String imageUrl
-    ) {
-        return new ReferenceAssetRespDto(key, assetType, label, description, imageUrl);
+    private ReferenceAssetRespDto toReferenceAssetResponse(ReferenceAsset referenceAsset) {
+        return new ReferenceAssetRespDto(
+                referenceAsset.getId(),
+                referenceAsset.getReferenceKey(),
+                referenceAsset.getReferenceType(),
+                referenceAsset.getName(),
+                referenceAsset.getDescription(),
+                getReferenceAssetImageUrl(referenceAsset)
+        );
+    }
+
+    private String getReferenceAssetImageUrl(ReferenceAsset referenceAsset) {
+        if (referenceAsset.getObjectName() == null || referenceAsset.getObjectName().isBlank()) {
+            return referenceAsset.getImageUrl();
+        }
+
+        return gcsService.generateSignedUrl(referenceAsset.getObjectName());
     }
 }

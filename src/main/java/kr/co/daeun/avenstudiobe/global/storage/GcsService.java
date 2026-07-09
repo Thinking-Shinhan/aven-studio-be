@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.global.storage;
 
+import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
@@ -43,6 +44,29 @@ public class GcsService {
 
         } catch (IOException e) {
             throw new RuntimeException("이미지 업로드에 실패했습니다.", e);
+        }
+    }
+
+    public UploadedFile uploadReferenceAsset(MultipartFile file, String referenceType) {
+        validateImage(file);
+
+        try {
+            String extension = getExtension(file.getOriginalFilename());
+            String normalizedReferenceType = referenceType.toLowerCase();
+            String objectName = "reference-assets/" + normalizedReferenceType + "/" + UUID.randomUUID() + extension;
+
+            BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+                    .setContentType(file.getContentType())
+                    .build();
+
+            storage.create(blobInfo, file.getInputStream());
+
+            String fileUrl = "https://storage.googleapis.com/" + bucketName + "/" + objectName;
+
+            return new UploadedFile(fileUrl, objectName, file.getOriginalFilename(), file.getContentType(), file.getSize());
+
+        } catch (IOException e) {
+            throw new RuntimeException("레퍼런스 이미지 업로드에 실패했습니다.", e);
         }
     }
 
@@ -181,6 +205,19 @@ public class GcsService {
         );
 
         return signedUrl.toString();
+    }
+
+    public byte[] download(String objectName) {
+        if (objectName == null || objectName.isBlank()) {
+            throw new IllegalArgumentException("다운로드할 파일 경로가 없습니다.");
+        }
+
+        Blob blob = storage.get(bucketName, objectName);
+        if (blob == null || !blob.exists()) {
+            throw new IllegalArgumentException("GCS 파일을 찾을 수 없습니다.");
+        }
+
+        return blob.getContent();
     }
 
 }

@@ -20,15 +20,23 @@ public class AssetService {
 
     private final GcsService gcsService;
     private final AssetRepository assetRepository;
+    private static final String DEFAULT_PRODUCT_IMAGE_ROLE = "PRODUCT_IMAGE";
+    private static final String GENERATED_RESULT_ROLE = "GENERATED_RESULT";
     
     // 이미지 한 장 업로드
     @Transactional
     public Asset uploadProductImage(MultipartFile file, Product product) {
+        return uploadProductImage(file, product, DEFAULT_PRODUCT_IMAGE_ROLE);
+    }
+
+    @Transactional
+    public Asset uploadProductImage(MultipartFile file, Product product, String assetRole) {
         GcsService.UploadedFile uploaded = gcsService.upload(file, product.getId());
 
         try {
             Asset asset = Asset.builder()
                     .type("IMAGE")
+                    .assetRole(assetRole)
                     .fileUrl(uploaded.fileUrl())
                     .objectName(uploaded.objectName())
                     .originalFilename(uploaded.originalFilename())
@@ -49,17 +57,32 @@ public class AssetService {
     // 이미지 여러 장 업로드
     @Transactional
     public List<Asset> uploadProductImages(List<MultipartFile> files, Product product) {
+        List<String> defaultRoles = files.stream()
+                .map(file -> DEFAULT_PRODUCT_IMAGE_ROLE)
+                .toList();
+
+        return uploadProductImages(files, defaultRoles, product);
+    }
+
+    @Transactional
+    public List<Asset> uploadProductImages(List<MultipartFile> files, List<String> assetRoles, Product product) {
+        if (assetRoles == null || files.size() != assetRoles.size()) {
+            throw new IllegalArgumentException("이미지 파일 수와 이미지 역할 수가 일치해야 합니다.");
+        }
+
         List<String> uploadedObjectNames = new ArrayList<>();
 
         try {
             List<Asset> assets = new ArrayList<>();
 
-            for (MultipartFile file : files) {
+            for (int i = 0; i < files.size(); i++) {
+                MultipartFile file = files.get(i);
                 GcsService.UploadedFile uploaded = gcsService.upload(file, product.getId());
                 uploadedObjectNames.add(uploaded.objectName());
 
                 Asset asset = Asset.builder()
                         .type("IMAGE")
+                        .assetRole(assetRoles.get(i))
                         .fileUrl(uploaded.fileUrl())
                         .objectName(uploaded.objectName())
                         .originalFilename(uploaded.originalFilename())
@@ -96,6 +119,7 @@ public class AssetService {
         try {
             Asset asset = Asset.builder()
                     .type("GENERATED")
+                    .assetRole(GENERATED_RESULT_ROLE)
                     .fileUrl(uploaded.fileUrl())
                     .objectName(uploaded.objectName())
                     .originalFilename(uploaded.originalFilename())
@@ -129,6 +153,15 @@ public class AssetService {
         assetRepository.delete(asset);
     }
 
+    @Transactional
+    public void deleteAssetByIdAndBrandId(Long assetId, Long brandId) {
+        Asset asset = assetRepository.findByIdAndProduct_Brand_Id(assetId, brandId)
+                .orElseThrow(() -> new IllegalArgumentException("이미지가 존재하지 않거나 접근 권한이 없습니다."));
+
+        gcsService.delete(asset.getObjectName());
+        assetRepository.delete(asset);
+    }
+
     @Transactional(readOnly = true)
     public List<AssetImageResult> getProductImages(Long productId) {
         List<Asset> assets = assetRepository.findByProductIdOrderByIdDesc(productId);
@@ -136,7 +169,9 @@ public class AssetService {
         return assets.stream()
                 .map(asset -> new AssetImageResult(
                         asset.getId(),
+                        asset.getAssetRole(),
                         gcsService.generateSignedUrl(asset.getObjectName()),
+                        asset.getObjectName(),
                         asset.getOriginalFilename(),
                         asset.getContentType(),
                         asset.getSize()
@@ -160,7 +195,9 @@ public class AssetService {
 
     public record AssetImageResult(
             Long assetId,
+            String assetRole,
             String imageUrl,
+            String objectName,
             String originalFilename,
             String contentType,
             long size

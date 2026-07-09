@@ -81,7 +81,8 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "https://aven-studio.store",
-                "https://aven-frontend-kmlplxyt3q-du.a.run.app"
+                "https://aven-frontend-kmlplxyt3q-du.a.run.app",
+                "https://aven-studio-fe-production.up.railway.app"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
