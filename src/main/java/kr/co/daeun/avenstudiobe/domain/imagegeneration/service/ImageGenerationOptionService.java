@@ -8,8 +8,11 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateListRespD
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -18,6 +21,7 @@ import java.util.List;
 public class ImageGenerationOptionService {
 
     private final ReferenceAssetRepository referenceAssetRepository;
+    private final GcsService gcsService;
 
     public ImageGenerationOptionsRespDto getOptions() {
         return new ImageGenerationOptionsRespDto(
@@ -84,6 +88,46 @@ public class ImageGenerationOptionService {
         return new ReferenceAssetListRespDto(normalizedAssetType, assets);
     }
 
+    @Transactional
+    public ReferenceAssetRespDto uploadReferenceAsset(
+            MultipartFile file,
+            String assetType,
+            String key,
+            String label,
+            String description,
+            Integer sortOrder
+    ) {
+        String normalizedAssetType = normalizeRequiredAssetType(assetType);
+        String normalizedKey = normalizeReferenceKey(key);
+        String normalizedLabel = normalizeLabel(label);
+
+        if (referenceAssetRepository.existsByReferenceKey(normalizedKey)) {
+            throw new IllegalArgumentException("이미 사용 중인 레퍼런스 에셋 key입니다.");
+        }
+
+        GcsService.UploadedFile uploaded = gcsService.uploadReferenceAsset(file, normalizedAssetType);
+
+        try {
+            ReferenceAsset referenceAsset = ReferenceAsset.builder()
+                    .referenceType(normalizedAssetType)
+                    .referenceKey(normalizedKey)
+                    .name(normalizedLabel)
+                    .imageUrl(uploaded.fileUrl())
+                    .objectName(uploaded.objectName())
+                    .contentType(uploaded.contentType())
+                    .description(description)
+                    .active(true)
+                    .sortOrder(sortOrder == null ? 0 : sortOrder)
+                    .build();
+
+            return toReferenceAssetResponse(referenceAssetRepository.save(referenceAsset));
+
+        } catch (RuntimeException e) {
+            gcsService.deleteQuietly(uploaded.objectName());
+            throw e;
+        }
+    }
+
     private List<ShotTemplateRespDto> productCutShotTemplates() {
         return List.of(
                 shot("FRONT", "정면", "PRODUCT_CUT", "상품의 정면 전체가 명확하게 보이는 제품컷으로 생성한다.", "전면 실루엣 확인용"),
@@ -130,6 +174,14 @@ public class ImageGenerationOptionService {
             return null;
         }
 
+        return normalizeRequiredAssetType(assetType);
+    }
+
+    private String normalizeRequiredAssetType(String assetType) {
+        if (assetType == null || assetType.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 유형을 입력해주세요.");
+        }
+
         String normalizedAssetType = assetType.trim().toUpperCase();
 
         if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE").contains(normalizedAssetType)) {
@@ -137,6 +189,22 @@ public class ImageGenerationOptionService {
         }
 
         return normalizedAssetType;
+    }
+
+    private String normalizeReferenceKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 key를 입력해주세요.");
+        }
+
+        return key.trim();
+    }
+
+    private String normalizeLabel(String label) {
+        if (label == null || label.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 이름을 입력해주세요.");
+        }
+
+        return label.trim();
     }
 
     private OptionRespDto option(String key, String label, String description) {
@@ -154,7 +222,15 @@ public class ImageGenerationOptionService {
                 referenceAsset.getReferenceType(),
                 referenceAsset.getName(),
                 referenceAsset.getDescription(),
-                referenceAsset.getImageUrl()
+                getReferenceAssetImageUrl(referenceAsset)
         );
+    }
+
+    private String getReferenceAssetImageUrl(ReferenceAsset referenceAsset) {
+        if (referenceAsset.getObjectName() == null || referenceAsset.getObjectName().isBlank()) {
+            return referenceAsset.getImageUrl();
+        }
+
+        return gcsService.generateSignedUrl(referenceAsset.getObjectName());
     }
 }

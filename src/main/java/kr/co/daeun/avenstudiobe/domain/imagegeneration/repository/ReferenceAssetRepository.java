@@ -10,4 +10,6 @@ public interface ReferenceAssetRepository extends JpaRepository<ReferenceAsset, 
     List<ReferenceAsset> findByActiveTrueOrderBySortOrderAscIdAsc();
 
     List<ReferenceAsset> findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc(String referenceType);
+
+    boolean existsByReferenceKey(String referenceKey);
 }

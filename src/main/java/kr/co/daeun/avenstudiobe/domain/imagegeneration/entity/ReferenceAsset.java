@@ -2,6 +2,7 @@ package kr.co.daeun.avenstudiobe.domain.imagegeneration.entity;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -48,4 +49,27 @@ public class ReferenceAsset {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Builder
+    private ReferenceAsset(
+            String referenceType,
+            String referenceKey,
+            String name,
+            String imageUrl,
+            String objectName,
+            String contentType,
+            String description,
+            Boolean active,
+            Integer sortOrder
+    ) {
+        this.referenceType = referenceType;
+        this.referenceKey = referenceKey;
+        this.name = name;
+        this.imageUrl = imageUrl;
+        this.objectName = objectName;
+        this.contentType = contentType;
+        this.description = description;
+        this.active = active;
+        this.sortOrder = sortOrder;
+    }
 }
