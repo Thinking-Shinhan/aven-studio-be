@@ -32,41 +32,26 @@ public class BrandMoodService {
     private final AnthropicMoodClient anthropicMoodClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public BrandMoodAnalysisRespDto analyze(Long brandId, BrandMoodAnalyzeReqDto request, User user) {
+    public BrandMoodAnalysisRespDto analyze(Long brandId, BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
         Brand brand = findBrand(brandId);
         validateBrandOwner(user, brandId);
+        validateRequiredSourceUrl(request);
 
         String systemPrompt = buildAnalyzeSystemPrompt();
         String userPrompt = buildAnalyzeUserPrompt(brand, request);
+
+        if (hasPdf(file)) {
+            validatePdf(file);
+            String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
+            return parseAnalysisResponse(request, claudeText, "PDF");
+        }
+
         String claudeText = anthropicMoodClient.analyzeBrandMood(systemPrompt, userPrompt);
-        return parseAnalysisResponse(request, claudeText, "TEXT");
+        return parseAnalysisResponse(request, claudeText, "URL");
     }
 
-    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
-        validatePdf(file);
-
-        String systemPrompt = buildAnalyzeSystemPrompt();
-        String userPrompt = buildAnalyzeUserPrompt(brand, request);
-        String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
-        return parseAnalysisResponse(request, claudeText, "PDF");
-    }
-
-    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, String requestJson, MultipartFile file, User user) {
-        return analyzePdf(brandId, parseAnalyzeRequest(requestJson), file, user);
-    }
-
-    private BrandMoodAnalyzeReqDto parseAnalyzeRequest(String requestJson) {
-        if (requestJson == null || requestJson.isBlank()) {
-            throw new IllegalArgumentException("request JSON을 입력해주세요.");
-        }
-
-        try {
-            return objectMapper.readValue(requestJson, BrandMoodAnalyzeReqDto.class);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("request JSON 형식이 올바르지 않습니다.", e);
-        }
+    private boolean hasPdf(MultipartFile file) {
+        return file != null && !file.isEmpty();
     }
 
     private BrandMoodAnalysisRespDto parseAnalysisResponse(
@@ -240,6 +225,12 @@ public class BrandMoodService {
                   "customBrandNote": "string|null"
                 }
                 """;
+    }
+
+    private void validateRequiredSourceUrl(BrandMoodAnalyzeReqDto request) {
+        if (request.getSourceUrl() == null || request.getSourceUrl().isBlank()) {
+            throw new IllegalArgumentException("브랜드 URL을 입력해주세요.");
+        }
     }
 
     private String buildAnalyzeUserPrompt(Brand brand, BrandMoodAnalyzeReqDto request) {

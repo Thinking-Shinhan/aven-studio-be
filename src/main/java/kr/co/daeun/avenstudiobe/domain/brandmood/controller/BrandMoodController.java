@@ -29,28 +29,26 @@ public class BrandMoodController {
     private final BrandMoodService brandMoodService;
     private final UsersService usersService;
 
-    @PostMapping("/analyze")
-    @Operation(summary = "브랜드 무드 분석", description = "브랜드 자료 텍스트를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
+    @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "브랜드 무드 분석", description = "브랜드 URL과 선택 PDF 자료를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
     public ResponseEntity<BrandMoodAnalysisRespDto> analyze(
             @PathVariable Long brandId,
-            @Valid @RequestBody BrandMoodAnalyzeReqDto request,
+            @RequestParam("sourceUrl") String sourceUrl,
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(required = false) String sourceText,
+            @RequestParam(required = false) String customInstruction,
+            @RequestPart(required = false) MultipartFile file,
             Authentication authentication
     ) {
         User user = usersService.findByLoginId(authentication.getName());
-        BrandMoodAnalysisRespDto response = brandMoodService.analyze(brandId, request, user);
-        return ResponseEntity.ok(response);
-    }
 
-    @PostMapping(value = "/analyze/pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "PDF 기반 브랜드 무드 분석", description = "브랜드 PDF 자료를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
-    public ResponseEntity<BrandMoodAnalysisRespDto> analyzePdf(
-            @PathVariable Long brandId,
-            @RequestParam("request") String request,
-            @RequestPart("file") MultipartFile file,
-            Authentication authentication
-    ) {
-        User user = usersService.findByLoginId(authentication.getName());
-        BrandMoodAnalysisRespDto response = brandMoodService.analyzePdf(brandId, request, file, user);
+        BrandMoodAnalyzeReqDto request = new BrandMoodAnalyzeReqDto();
+        request.setSourceType(sourceType);
+        request.setSourceUrl(sourceUrl);
+        request.setSourceText(sourceText);
+        request.setCustomInstruction(customInstruction);
+
+        BrandMoodAnalysisRespDto response = brandMoodService.analyze(brandId, request, file, user);
         return ResponseEntity.ok(response);
     }
 

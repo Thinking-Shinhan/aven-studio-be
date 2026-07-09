@@ -270,6 +270,9 @@ public class ImageGenerationService {
         }
 
         return """
+                [SYSTEM INSTRUCTION]
+                %s
+
                 [BRAND INSTRUCTION]
                 %s
 
@@ -278,10 +281,47 @@ public class ImageGenerationService {
                 [IMAGE GENERATION REQUEST]
                 %s
                 """.formatted(
+                buildSystemInstruction(),
                 brandInstruction.trim(),
                 buildReferenceInstruction(referenceAssets),
                 userPrompt.trim()
         );
+    }
+
+    private String buildSystemInstruction() {
+        return """
+                You are a fashion ecommerce image generation director.
+                Combine the reference images provided or selected by the user to generate one premium fashion model image.
+
+                The attached reference images are identified by explicit input keys, not by visual order.
+                The key names are critical:
+
+                productImages = GARMENT_REFERENCE
+                modelImage = MODEL_REFERENCE
+                poseImage = POSE_COMPOSITION_REFERENCE
+                backgroundImage = BACKGROUND_REFERENCE
+
+                Never swap the role of each reference image.
+
+                Each reference image has a different role:
+                GARMENT_REFERENCE is the product accuracy reference for the garment the final model must wear.
+                MODEL_REFERENCE is the identity reference for the final person.
+                POSE_COMPOSITION_REFERENCE is the body pose and camera composition reference.
+                BACKGROUND_REFERENCE is the spatial mood and atmosphere reference for the final scene.
+
+                The final result must be one complete fashion ecommerce image.
+                Do not create a collage, split screen, comparison image, multiple panels, text, labels, watermarks, or graphic overlays.
+                Do not place the reference images directly inside the final result.
+                Only one model may appear in the final image.
+
+                Priority order:
+                1. GARMENT_REFERENCE product accuracy
+                2. MODEL_REFERENCE identity consistency
+                3. POSE_COMPOSITION_REFERENCE body pose structure
+                4. BACKGROUND_REFERENCE spatial mood and atmosphere
+                5. Brand mood
+                6. User selected mood options
+                """;
     }
 
     private String buildReferenceInstruction(List<ReferenceAssetInput> referenceAssets) {
@@ -305,16 +345,39 @@ public class ImageGenerationService {
                 Never swap the role of each reference image.
 
                 productImages = GARMENT_REFERENCE.
-                productImages are the product accuracy references. The final model must wear the exact garment from productImages. Preserve the actual color, shape, fit, silhouette, length, material, logo position, washed fabric texture, drape, and construction details. Do not redesign the garment. Do not change the product category. Do not change the product color.
+                productImages are the product accuracy references. The final model must wear the exact garment from productImages.
+                Preserve the actual color, shape, fit, silhouette, length, material, logo position, washed fabric texture, drape, and construction details.
+                Do not redesign the garment.
+                Do not change the product category.
+                Do not change the product color.
+                Do not add pockets, zippers, buttons, labels, graphics, patterns, decorations, or logos that are not visible in productImages.
 
                 modelImage = MODEL_REFERENCE.
-                modelImage is the identity reference. Preserve face shape, skin tone, body proportion, hair impression, age impression, and overall human mood. If productImages provide only part of the outfit, use modelImage only for missing styling elements.
+                modelImage is the identity reference. The final person should look like the same person as modelImage.
+                Preserve face shape, skin tone, body proportion, hair impression, age impression, and overall human mood.
+                The garment and product details from productImages always override clothing in modelImage.
+                If productImages provide only part of the outfit, use modelImage only for missing styling elements such as pants, shoes, accessories, socks, hats, or layering.
+                Do not copy the entire existing outfit from modelImage when it conflicts with productImages.
+                The final outfit should naturally combine the product reference item from productImages with the styling context from modelImage.
 
                 poseImage = POSE_COMPOSITION_REFERENCE.
-                poseImage is the exact pose and camera composition reference. Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame. Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
+                poseImage is not a mood reference. It is the exact body pose and camera composition template.
+                Reproduce the pose from poseImage as closely as possible.
+                Do not reinterpret it as a generic ecommerce pose.
+                Do not casually change arm, hand, leg, foot, shoulder, pelvis, waist, neck, head, or gaze direction.
+                Match body direction, upper body rotation, shoulder angle, pelvis angle, waist tilt, head direction, gaze direction, arm position, elbow angle, hand position, rough finger direction, leg position, knee angle, foot direction, weight shift, total silhouette, camera angle, crop range, and model position in frame as closely as possible.
+                Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame.
+                Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
 
                 backgroundImage = BACKGROUND_REFERENCE.
                 backgroundImage is the background mood reference. Use backgroundImage for background color, lighting feeling, spatial depth, material mood, and overall atmosphere. Do not copy people, text, logos, signs, or unnecessary objects from backgroundImage.
+
+                [OUTPUT CONDITIONS]
+                The final result must be one complete premium fashion ecommerce image.
+                Only one model may appear in the final image.
+                Do not create a collage, split screen, comparison image, multiple panels, or multiple-result layout.
+                Do not place the reference images directly inside the final result.
+                Do not add text, labels, watermarks, or graphic overlays.
 
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
