@@ -46,6 +46,12 @@ public class ReferenceAsset {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
+    @Column(name = "cut_type", length = 30)
+    private String cutType;
+
+    @Column(name = "prompt_text", columnDefinition = "TEXT")
+    private String promptText;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -60,7 +66,9 @@ public class ReferenceAsset {
             String contentType,
             String description,
             Boolean active,
-            Integer sortOrder
+            Integer sortOrder,
+            String cutType,
+            String promptText
     ) {
         this.referenceType = referenceType;
         this.referenceKey = referenceKey;
@@ -71,5 +79,7 @@ public class ReferenceAsset {
         this.description = description;
         this.active = active;
         this.sortOrder = sortOrder;
+        this.cutType = cutType;
+        this.promptText = promptText;
     }
 }
