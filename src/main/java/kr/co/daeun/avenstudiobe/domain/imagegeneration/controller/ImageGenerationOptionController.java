@@ -53,8 +53,7 @@ public class ImageGenerationOptionController {
             @RequestParam("key") String key,
             @RequestParam("label") String label,
             @RequestParam(required = false) String description,
-            @RequestParam(defaultValue = "0") Integer sortOrder,
-            @RequestParam(required = false) String promptText
+            @RequestParam(defaultValue = "0") Integer sortOrder
     ) {
         ReferenceAssetRespDto referenceAsset = imageGenerationOptionService.uploadReferenceAsset(
                 file,
@@ -62,8 +61,7 @@ public class ImageGenerationOptionController {
                 key,
                 label,
                 description,
-                sortOrder,
-                promptText
+                sortOrder
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(referenceAsset);
