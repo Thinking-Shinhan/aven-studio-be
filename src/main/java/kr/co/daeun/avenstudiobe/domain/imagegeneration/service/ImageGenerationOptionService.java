@@ -67,11 +67,15 @@ public class ImageGenerationOptionService {
     public ShotTemplateListRespDto getShotTemplates(String cutType) {
         String normalizedCutType = normalizeCutType(cutType);
 
-        if ("MODEL_CUT".equals(normalizedCutType)) {
-            return new ShotTemplateListRespDto(normalizedCutType, modelCutShotTemplates());
-        }
+        List<ReferenceAsset> templates = referenceAssetRepository
+                .findByReferenceTypeAndCutTypeAndActiveTrueOrderBySortOrderAscIdAsc(
+                        "SHOT_TEMPLATE", normalizedCutType);
 
-        return new ShotTemplateListRespDto(normalizedCutType, productCutShotTemplates());
+        List<ShotTemplateRespDto> dtos = templates.stream()
+                .map(this::toShotTemplateResponse)
+                .toList();
+
+        return new ShotTemplateListRespDto(normalizedCutType, dtos);
     }
 
     public ReferenceAssetListRespDto getReferenceAssets(String assetType) {
@@ -95,14 +99,21 @@ public class ImageGenerationOptionService {
             String key,
             String label,
             String description,
-            Integer sortOrder
+            Integer sortOrder,
+            String cutType,
+            String promptText
     ) {
         String normalizedAssetType = normalizeRequiredAssetType(assetType);
         String normalizedKey = normalizeReferenceKey(key);
         String normalizedLabel = normalizeLabel(label);
+        String normalizedCutType = normalizeCutTypeOrNull(cutType);
 
         if (referenceAssetRepository.existsByReferenceKey(normalizedKey)) {
             throw new IllegalArgumentException("이미 사용 중인 레퍼런스 에셋 key입니다.");
+        }
+
+        if ("SHOT_TEMPLATE".equals(normalizedAssetType) && normalizedCutType == null) {
+            throw new IllegalArgumentException("SHOT_TEMPLATE 타입은 cutType을 반드시 지정해야 합니다.");
         }
 
         GcsService.UploadedFile uploaded = gcsService.uploadReferenceAsset(file, normalizedAssetType);
@@ -118,6 +129,8 @@ public class ImageGenerationOptionService {
                     .description(description)
                     .active(true)
                     .sortOrder(sortOrder == null ? 0 : sortOrder)
+                    .cutType(normalizedCutType)
+                    .promptText(promptText)
                     .build();
 
             return toReferenceAssetResponse(referenceAssetRepository.save(referenceAsset));
@@ -128,32 +141,7 @@ public class ImageGenerationOptionService {
         }
     }
 
-    private List<ShotTemplateRespDto> productCutShotTemplates() {
-        return List.of(
-                shot("FRONT", "정면", "PRODUCT_CUT", "상품의 정면 전체가 명확하게 보이는 제품컷으로 생성한다.", "전면 실루엣 확인용"),
-                shot("BACK", "후면", "PRODUCT_CUT", "상품의 후면 전체가 명확하게 보이는 제품컷으로 생성한다.", "후면 실루엣 확인용"),
-                shot("SIDE", "측면", "PRODUCT_CUT", "상품의 측면 구조와 두께감이 보이는 제품컷으로 생성한다.", "측면 구조 확인용"),
-                shot("THREE_QUARTER", "45도", "PRODUCT_CUT", "상품을 45도 사선 각도에서 입체감 있게 보여주는 제품컷으로 생성한다.", "입체 실루엣 확인용"),
-                shot("FLAT_LAY", "플랫레이", "PRODUCT_CUT", "상품을 바닥에 평평하게 놓은 플랫레이 제품컷으로 생성한다.", "전체 형태 확인용"),
-                shot("HANGING", "행잉", "PRODUCT_CUT", "상품을 옷걸이에 건 상태의 행잉 제품컷으로 생성한다.", "걸린 상태 확인용"),
-                shot("TOP_VIEW", "탑뷰", "PRODUCT_CUT", "상품을 위에서 내려다본 탑뷰 제품컷으로 생성한다.", "상단 구조 확인용"),
-                shot("UNDER_BRIM", "챙 안쪽", "PRODUCT_CUT", "모자 챙 안쪽과 하단 구조가 보이는 제품 디테일컷으로 생성한다.", "모자 디테일 확인용"),
-                shot("DETAIL", "디테일", "PRODUCT_CUT", "상품의 핵심 디테일 영역을 확대해서 보여주는 제품 디테일컷으로 생성한다.", "디테일 확대용"),
-                shot("LOGO", "로고", "PRODUCT_CUT", "상품의 로고 위치와 자수 또는 프린트 질감이 보이도록 확대한다.", "로고 확인용"),
-                shot("FABRIC", "소재", "PRODUCT_CUT", "상품 원단의 조직감, 두께감, 표면 질감이 보이도록 확대한다.", "소재 확인용"),
-                shot("CONSTRUCTION", "봉제", "PRODUCT_CUT", "봉제선, 시접, 마감 구조가 보이도록 확대한다.", "구조 확인용")
-        );
-    }
 
-    private List<ShotTemplateRespDto> modelCutShotTemplates() {
-        return List.of(
-                shot("FRONT_STANDING", "정면", "MODEL_CUT", "모델이 정면을 바라보는 자연스러운 착용컷으로 생성한다.", "기본 착용 확인용"),
-                shot("SIDE_STANDING", "측면", "MODEL_CUT", "모델의 측면 실루엣과 상품 핏이 보이는 착용컷으로 생성한다.", "측면 핏 확인용"),
-                shot("BACK_STANDING", "후면", "MODEL_CUT", "모델의 후면 실루엣과 상품 뒷면이 보이는 착용컷으로 생성한다.", "후면 핏 확인용"),
-                shot("WALKING", "워킹", "MODEL_CUT", "모델이 자연스럽게 걷는 활동감 있는 착용컷으로 생성한다.", "활동감 확인용"),
-                shot("SITTING", "앉기", "MODEL_CUT", "모델이 앉아 있는 자세의 착용컷으로 생성한다.", "착석 핏 확인용")
-        );
-    }
 
     private String normalizeCutType(String cutType) {
         if (cutType == null || cutType.isBlank()) {
@@ -184,7 +172,7 @@ public class ImageGenerationOptionService {
 
         String normalizedAssetType = assetType.trim().toUpperCase();
 
-        if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE").contains(normalizedAssetType)) {
+        if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE", "SHOT_TEMPLATE").contains(normalizedAssetType)) {
             throw new IllegalArgumentException("지원하지 않는 레퍼런스 에셋 유형입니다.");
         }
 
@@ -207,12 +195,34 @@ public class ImageGenerationOptionService {
         return label.trim();
     }
 
+    private String normalizeCutTypeOrNull(String cutType) {
+        if (cutType == null || cutType.isBlank()) {
+            return null;
+        }
+
+        String normalized = cutType.trim().toUpperCase();
+
+        if (!List.of("MODEL_CUT", "PRODUCT_CUT").contains(normalized)) {
+            throw new IllegalArgumentException("지원하지 않는 컷 유형입니다.");
+        }
+
+        return normalized;
+    }
+
     private OptionRespDto option(String key, String label, String description) {
         return new OptionRespDto(key, label, description);
     }
 
-    private ShotTemplateRespDto shot(String key, String label, String cutType, String promptText, String description) {
-        return new ShotTemplateRespDto(key, label, cutType, promptText, description);
+    private ShotTemplateRespDto toShotTemplateResponse(ReferenceAsset asset) {
+        return new ShotTemplateRespDto(
+                asset.getId(),
+                asset.getReferenceKey(),
+                asset.getName(),
+                asset.getCutType(),
+                asset.getPromptText(),
+                asset.getDescription(),
+                getReferenceAssetImageUrl(asset)
+        );
     }
 
     private ReferenceAssetRespDto toReferenceAssetResponse(ReferenceAsset referenceAsset) {
