@@ -134,9 +134,7 @@ public class FallbackPlacementService {
 
     private ImagePlacementRespDto toResponse(PlacementSlot slot, AssetPlacementCandidate asset) {
         return new ImagePlacementRespDto(
-                slot.blockOrder(),
                 slot.instanceKey(),
-                slot.templateKey(),
                 slot.slotKey(),
                 asset.assetId(),
                 asset.fileUrl(),

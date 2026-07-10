@@ -94,9 +94,7 @@ public class AutoPlacementResultValidator {
         }
 
         ImagePlacementRespDto response = new ImagePlacementRespDto(
-                slot.blockOrder(),
                 slot.instanceKey(),
-                slot.templateKey(),
                 slot.slotKey(),
                 asset.assetId(),
                 asset.fileUrl(),
