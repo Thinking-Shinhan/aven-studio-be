@@ -23,7 +23,7 @@ public class AssetService {
     private final GcsService gcsService;
     private final AssetRepository assetRepository;
     private static final String IMAGE_TYPE = "IMAGE";
-    private static final String ACTIVE_STATUS = "ACTIVE";
+    private static final String USED_STATUS = "USED";
     private static final String DEFAULT_PRODUCT_IMAGE_ROLE = "PRODUCT_IMAGE";
     private static final Set<String> CLIENT_UPLOAD_ROLES = Set.of(
             "PRODUCT_FRONT",
@@ -58,7 +58,7 @@ public class AssetService {
                     .originalFilename(uploaded.originalFilename())
                     .contentType(uploaded.contentType())
                     .size(uploaded.size())
-                    .status(ACTIVE_STATUS)
+                    .status(USED_STATUS)
                     .product(product)
                     .build();
 
@@ -106,7 +106,7 @@ public class AssetService {
                         .originalFilename(uploaded.originalFilename())
                         .contentType(uploaded.contentType())
                         .size(uploaded.size())
-                        .status(ACTIVE_STATUS)
+                        .status(USED_STATUS)
                         .product(product)
                         .build();
 
@@ -306,7 +306,7 @@ public class AssetService {
                 productId,
                 assetRole,
                 IMAGE_TYPE,
-                ACTIVE_STATUS
+                USED_STATUS
         );
 
         if (exists) {
