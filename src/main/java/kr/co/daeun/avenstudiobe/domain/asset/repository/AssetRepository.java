@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface AssetRepository extends JpaRepository<Asset, Long> {
     List<Asset> findByProductIdOrderByIdDesc(Long productId);
 
+    List<Asset> findByProductIdOrderByIdAsc(Long productId);
+
     Optional<Asset> findByIdAndProduct_Brand_Id(Long id, Long brandId);
 
     boolean existsByProductIdAndAssetRoleAndTypeAndStatus(

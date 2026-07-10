@@ -45,5 +45,7 @@ google:
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
   model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
+  max-tokens: 2048
+  timeout-seconds: 30
 image-generation:
   gcs-save-enabled: ${IMAGE_GENERATION_GCS_SAVE_ENABLED:true}
