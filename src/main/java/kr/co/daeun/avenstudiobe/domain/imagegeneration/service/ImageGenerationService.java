@@ -1,8 +1,5 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
@@ -29,6 +26,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Base64;
 import java.util.ArrayList;
@@ -428,7 +428,7 @@ public class ImageGenerationService {
 
         try {
             return objectMapper.readTree(jsonText);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("referenceJson 형식이 올바르지 않습니다.", e);
         }
     }
@@ -688,7 +688,7 @@ public class ImageGenerationService {
 
         try {
             return objectMapper.writeValueAsString(json);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("JSON 형식이 올바르지 않습니다.", e);
         }
     }
