@@ -9,6 +9,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.validator.AutoPlacementResultValidator;
+import kr.co.daeun.avenstudiobe.global.exception.AutoPlacementInsufficientImageException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,11 @@ public class AutoImagePlacementService {
     public AutoImagePlacementRespDto autoPlace(AutoImagePlacementReqDto request) {
         AutoPlacementContext context = contextLoader.load(request);
 
-        if (context.assets().isEmpty() || context.slots().isEmpty()) {
+        if (context.assets().isEmpty()) {
+            throw new AutoPlacementInsufficientImageException();
+        }
+
+        if (context.slots().isEmpty()) {
             return AutoImagePlacementRespDto.empty(context.productId());
         }
 
