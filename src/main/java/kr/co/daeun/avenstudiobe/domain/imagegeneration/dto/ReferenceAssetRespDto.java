@@ -7,6 +7,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class ReferenceAssetRespDto {
 
+    private Long referenceAssetId;
     private String key;
     private String assetType;
     private String label;

@@ -14,8 +14,10 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobRes
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationResultRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationJob;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationResult;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationJobRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationResultRepository;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
@@ -26,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
 import java.util.Base64;
 import java.util.ArrayList;
@@ -42,11 +45,13 @@ public class ImageGenerationService {
     private final ProductRepository productRepository;
     private final BrandMoodRepository brandMoodRepository;
     private final AssetRepository assetRepository;
+    private final ReferenceAssetRepository referenceAssetRepository;
     private final UsersRepository usersRepository;
     private final AssetService assetService;
     private final GcsService gcsService;
     private final GoogleAiImageProvider googleAiImageProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient restClient = RestClient.create();
 
     @Value("${image-generation.gcs-save-enabled:true}")
     private boolean gcsSaveEnabled;
@@ -255,6 +260,9 @@ public class ImageGenerationService {
         }
 
         return """
+                [SYSTEM INSTRUCTION]
+                %s
+
                 [BRAND INSTRUCTION]
                 %s
 
@@ -263,10 +271,51 @@ public class ImageGenerationService {
                 [IMAGE GENERATION REQUEST]
                 %s
                 """.formatted(
+                buildSystemInstruction(),
                 brandInstruction.trim(),
                 buildReferenceInstruction(referenceAssets),
                 userPrompt.trim()
         );
+    }
+
+    private String buildSystemInstruction() {
+        return """
+                You are a fashion ecommerce image generation director.
+                Combine the reference images provided or selected by the user to generate one premium fashion model image.
+
+                The attached reference images are identified by explicit input keys, not by visual order.
+                The key names are critical:
+
+                productImages = GARMENT_REFERENCE
+                outfitItems = OUTFIT_PRODUCT_REFERENCES
+                modelImage = MODEL_REFERENCE
+                poseImage = POSE_COMPOSITION_REFERENCE
+                backgroundImage = BACKGROUND_REFERENCE
+
+                Never swap the role of each reference image.
+
+                Each reference image has a different role:
+                GARMENT_REFERENCE is the product accuracy reference for the garment the final model must wear.
+                OUTFIT_PRODUCT_REFERENCES are product references selected for this generation request. Each item has its own request role and wearing part.
+                MODEL_REFERENCE is the identity reference for the final person.
+                POSE_COMPOSITION_REFERENCE is the body pose and camera composition reference.
+                BACKGROUND_REFERENCE is the spatial mood and atmosphere reference for the final scene.
+
+                The final result must be one complete fashion ecommerce image.
+                Do not create a collage, split screen, comparison image, multiple panels, text, labels, watermarks, or graphic overlays.
+                Do not place the reference images directly inside the final result.
+                Only one model may appear in the final image.
+
+                Priority order:
+                1. GARMENT_REFERENCE product accuracy
+                2. PRIMARY outfit item accuracy
+                3. STYLING outfit item consistency
+                4. MODEL_REFERENCE identity consistency
+                5. POSE_COMPOSITION_REFERENCE body pose structure
+                6. BACKGROUND_REFERENCE spatial mood and atmosphere
+                7. Brand mood
+                8. User selected mood options
+                """;
     }
 
     private String buildReferenceInstruction(List<ReferenceAssetInput> referenceAssets) {
@@ -278,8 +327,8 @@ public class ImageGenerationService {
         for (ReferenceAssetInput referenceAsset : referenceAssets) {
             keys.append("- ")
                     .append(referenceAsset.key())
-                    .append(" = assetId ")
-                    .append(referenceAsset.asset().getId())
+                    .append(" = ")
+                    .append(referenceAsset.sourceLabel())
                     .append("\n");
         }
 
@@ -290,16 +339,49 @@ public class ImageGenerationService {
                 Never swap the role of each reference image.
 
                 productImages = GARMENT_REFERENCE.
-                productImages are the product accuracy references. The final model must wear the exact garment from productImages. Preserve the actual color, shape, fit, silhouette, length, material, logo position, washed fabric texture, drape, and construction details. Do not redesign the garment. Do not change the product category. Do not change the product color.
+                productImages are the product accuracy references. The final model must wear the exact garment from productImages.
+                Preserve the actual color, shape, fit, silhouette, length, material, logo position, washed fabric texture, drape, and construction details.
+                Do not redesign the garment.
+                Do not change the product category.
+                Do not change the product color.
+                Do not add pockets, zippers, buttons, labels, graphics, patterns, decorations, or logos that are not visible in productImages.
+
+                outfitItems = OUTFIT_PRODUCT_REFERENCES.
+                outfitItems are products selected for this generation request.
+                A product can be PRIMARY in one request and STYLING in another request. Do not treat styling role as a fixed product property.
+                Each outfit item includes a request role and wearing part.
+                PRIMARY items are the most important products to preserve accurately in the final outfit.
+                STYLING items are additional owned-brand products that should be naturally worn together with the PRIMARY item.
+                Apply each outfit item only to its wearing part such as TOP, BOTTOM, OUTER, DRESS, SHOES, BAG, HAT, or ACCESSORY.
+                Do not merge one outfit item into the wrong body part.
+                Do not invent a different product category for an outfit item.
 
                 modelImage = MODEL_REFERENCE.
-                modelImage is the identity reference. Preserve face shape, skin tone, body proportion, hair impression, age impression, and overall human mood. If productImages provide only part of the outfit, use modelImage only for missing styling elements.
+                modelImage is the identity reference. The final person should look like the same person as modelImage.
+                Preserve face shape, skin tone, body proportion, hair impression, age impression, and overall human mood.
+                The garment and product details from productImages always override clothing in modelImage.
+                If productImages provide only part of the outfit, use modelImage only for missing styling elements such as pants, shoes, accessories, socks, hats, or layering.
+                Do not copy the entire existing outfit from modelImage when it conflicts with productImages.
+                The final outfit should naturally combine the product reference item from productImages with the styling context from modelImage.
 
                 poseImage = POSE_COMPOSITION_REFERENCE.
-                poseImage is the exact pose and camera composition reference. Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame. Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
+                poseImage is not a mood reference. It is the exact body pose and camera composition template.
+                Reproduce the pose from poseImage as closely as possible.
+                Do not reinterpret it as a generic ecommerce pose.
+                Do not casually change arm, hand, leg, foot, shoulder, pelvis, waist, neck, head, or gaze direction.
+                Match body direction, upper body rotation, shoulder angle, pelvis angle, waist tilt, head direction, gaze direction, arm position, elbow angle, hand position, rough finger direction, leg position, knee angle, foot direction, weight shift, total silhouette, camera angle, crop range, and model position in frame as closely as possible.
+                Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame.
+                Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
 
                 backgroundImage = BACKGROUND_REFERENCE.
                 backgroundImage is the background mood reference. Use backgroundImage for background color, lighting feeling, spatial depth, material mood, and overall atmosphere. Do not copy people, text, logos, signs, or unnecessary objects from backgroundImage.
+
+                [OUTPUT CONDITIONS]
+                The final result must be one complete premium fashion ecommerce image.
+                Only one model may appear in the final image.
+                Do not create a collage, split screen, comparison image, multiple panels, or multiple-result layout.
+                Do not place the reference images directly inside the final result.
+                Do not add text, labels, watermarks, or graphic overlays.
 
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
@@ -313,10 +395,15 @@ public class ImageGenerationService {
         }
 
         List<ReferenceAssetInput> references = new ArrayList<>();
+        addOutfitItems(references, root.path("outfitItems"), brandId);
         addProductImages(references, root.path("productImages"), brandId);
         addSingleReference(references, "modelImage", root.path("modelImage"), brandId);
         addSingleReference(references, "poseImage", root.path("poseImage"), brandId);
         addSingleReference(references, "backgroundImage", root.path("backgroundImage"), brandId);
+        addServiceReference(references, "modelImage", root.path("modelReferenceId"));
+        addServiceReference(references, "poseImage", root.path("poseReferenceId"));
+        addServiceReference(references, "backgroundImage", root.path("backgroundReferenceId"));
+        addServiceReference(references, "shotReferenceImage", root.path("shotReferenceId"));
 
         if (references.size() > 14) {
             throw new IllegalArgumentException("참조 이미지는 최대 14장까지만 첨부할 수 있습니다.");
@@ -371,7 +458,50 @@ public class ImageGenerationService {
             throw new IllegalArgumentException("참조 이미지가 로그인 사용자의 브랜드에 속하지 않습니다. assetId=" + assetId);
         }
 
-        references.add(new ReferenceAssetInput(key, asset));
+        references.add(new ReferenceAssetInput(
+                key,
+                "assetId " + asset.getId(),
+                gcsService.download(asset.getObjectName()),
+                asset.getContentType()
+        ));
+    }
+
+    private void addServiceReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        Long referenceAssetId = extractAssetId(node);
+        ReferenceAsset referenceAsset = referenceAssetRepository.findById(referenceAssetId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "서비스 레퍼런스 이미지를 찾을 수 없습니다. referenceAssetId=" + referenceAssetId
+                ));
+
+        if (!Boolean.TRUE.equals(referenceAsset.getActive())) {
+            throw new IllegalArgumentException("비활성 서비스 레퍼런스 이미지입니다. referenceAssetId=" + referenceAssetId);
+        }
+
+        references.add(new ReferenceAssetInput(
+                key,
+                "referenceAssetId " + referenceAsset.getId() + " (" + referenceAsset.getReferenceKey() + ")",
+                readReferenceAssetBytes(referenceAsset),
+                referenceAsset.getContentType()
+        ));
+    }
+
+    private byte[] readReferenceAssetBytes(ReferenceAsset referenceAsset) {
+        if (referenceAsset.getObjectName() != null && !referenceAsset.getObjectName().isBlank()) {
+            return gcsService.download(referenceAsset.getObjectName());
+        }
+
+        if (referenceAsset.getImageUrl() == null || referenceAsset.getImageUrl().isBlank()) {
+            throw new IllegalArgumentException("서비스 레퍼런스 이미지 URL이 비어 있습니다.");
+        }
+
+        return restClient.get()
+                .uri(referenceAsset.getImageUrl())
+                .retrieve()
+                .body(byte[].class);
     }
 
     private Long extractAssetId(JsonNode node) {
@@ -386,6 +516,85 @@ public class ImageGenerationService {
         throw new IllegalArgumentException("referenceJson에는 assetId 숫자 또는 {\"assetId\": number} 형식만 사용할 수 있습니다.");
     }
 
+    private void addOutfitItems(List<ReferenceAssetInput> references, JsonNode node, Long brandId) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+
+        if (!node.isArray()) {
+            throw new IllegalArgumentException("outfitItems는 배열 형식이어야 합니다.");
+        }
+
+        int index = 0;
+        for (JsonNode item : node) {
+            String role = normalizeOutfitItemValue(item.path("role").asText("STYLING"));
+            String wearingPart = normalizeOutfitItemValue(item.path("wearingPart").asText("UNSPECIFIED"));
+            Long productId = item.path("productId").isNumber() ? item.path("productId").asLong() : null;
+            JsonNode assetIds = item.path("assetIds");
+
+            if (assetIds == null || assetIds.isMissingNode() || assetIds.isNull()) {
+                throw new IllegalArgumentException("outfitItems.assetIds를 입력해주세요.");
+            }
+
+            if (assetIds.isArray()) {
+                int assetIndex = 0;
+                for (JsonNode assetId : assetIds) {
+                    addOutfitItemReference(references, index, assetIndex, role, wearingPart, productId, assetId, brandId);
+                    assetIndex++;
+                }
+            } else {
+                addOutfitItemReference(references, index, 0, role, wearingPart, productId, assetIds, brandId);
+            }
+
+            index++;
+        }
+    }
+
+    private void addOutfitItemReference(
+            List<ReferenceAssetInput> references,
+            int itemIndex,
+            int assetIndex,
+            String role,
+            String wearingPart,
+            Long productId,
+            JsonNode node,
+            Long brandId
+    ) {
+        Long assetId = extractAssetId(node);
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new IllegalArgumentException("착장 상품 이미지를 찾을 수 없습니다. assetId=" + assetId));
+
+        if (asset.getProduct() == null || !asset.getProduct().getBrand().getId().equals(brandId)) {
+            throw new IllegalArgumentException("착장 상품 이미지가 로그인 사용자의 브랜드에 속하지 않습니다. assetId=" + assetId);
+        }
+
+        if (productId != null && !asset.getProduct().getId().equals(productId)) {
+            throw new IllegalArgumentException("착장 상품 이미지가 요청 productId와 일치하지 않습니다. assetId=" + assetId);
+        }
+
+        references.add(new ReferenceAssetInput(
+                "outfitItems[" + itemIndex + "].assetIds[" + assetIndex + "]",
+                "outfitItem role=" + role
+                        + ", wearingPart=" + wearingPart
+                        + ", productId=" + nullToText(productId)
+                        + ", assetId " + asset.getId(),
+                gcsService.download(asset.getObjectName()),
+                asset.getContentType()
+        ));
+    }
+
+    private String normalizeOutfitItemValue(String value) {
+        if (value == null || value.isBlank()) {
+            return "UNSPECIFIED";
+        }
+
+        return value.trim().toUpperCase();
+    }
+
+    private String nullToText(Long value) {
+        return value == null ? "UNSPECIFIED" : value.toString();
+    }
+
     private List<GoogleAiImageProvider.ReferenceImage> toProviderReferenceImages(
             List<ReferenceAssetInput> referenceAssets
     ) {
@@ -396,8 +605,8 @@ public class ImageGenerationService {
         return referenceAssets.stream()
                 .map(referenceAsset -> new GoogleAiImageProvider.ReferenceImage(
                         referenceAsset.key(),
-                        gcsService.download(referenceAsset.asset().getObjectName()),
-                        referenceAsset.asset().getContentType()
+                        referenceAsset.bytes(),
+                        referenceAsset.contentType()
                 ))
                 .toList();
     }
@@ -468,7 +677,9 @@ public class ImageGenerationService {
 
     private record ReferenceAssetInput(
             String key,
-            Asset asset
+            String sourceLabel,
+            byte[] bytes,
+            String contentType
     ) {
     }
 }
