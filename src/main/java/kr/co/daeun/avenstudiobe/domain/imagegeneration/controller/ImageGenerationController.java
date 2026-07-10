@@ -28,8 +28,11 @@ public class ImageGenerationController {
     }
 
     @GetMapping("/{jobId}")
-    public ResponseEntity<ImageGenerationJobRespDto> getJob(@PathVariable Long jobId) {
-        ImageGenerationJobRespDto response = imageGenerationService.getJob(jobId);
+    public ResponseEntity<ImageGenerationJobRespDto> getJob(
+            @PathVariable Long jobId,
+            Authentication authentication
+    ) {
+        ImageGenerationJobRespDto response = imageGenerationService.getJob(jobId, authentication.getName());
 
         return ResponseEntity.ok(response);
     }

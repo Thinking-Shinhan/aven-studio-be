@@ -7,7 +7,6 @@ import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
-import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
 import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobCreateReqDto;
@@ -41,7 +40,6 @@ public class ImageGenerationService {
     private final ImageGenerationJobRepository jobRepository;
     private final ImageGenerationResultRepository resultRepository;
     private final ProductRepository productRepository;
-    private final BrandRepository brandRepository;
     private final BrandMoodRepository brandMoodRepository;
     private final AssetRepository assetRepository;
     private final UsersRepository usersRepository;
@@ -58,12 +56,11 @@ public class ImageGenerationService {
 
         User user = usersRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        Brand brand = brandRepository.findById(request.getBrandId())
-                .orElseThrow(() -> new IllegalArgumentException("브랜드를 찾을 수 없습니다."));
-        Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+        Brand brand = user.getBrand();
+        Product product = productRepository.findByIdAndBrand_Id(request.getProductId(), brand.getId())
+                .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
         BrandMood brandMood = findBrandMood(request.getBrandMoodId(), brand.getId());
-        List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson());
+        List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson(), brand.getId());
         String compiledPrompt = compilePrompt(brandMood, request.getPrompt(), referenceAssets);
 
         ImageGenerationJob job = savePendingJob(request, user, brand, product, compiledPrompt);
@@ -104,9 +101,11 @@ public class ImageGenerationService {
     }
 
     @Transactional(readOnly = true)
-    public ImageGenerationJobRespDto getJob(Long jobId) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
+    public ImageGenerationJobRespDto getJob(Long jobId, String loginId) {
+        User user = usersRepository.findByLoginId(loginId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        ImageGenerationJob job = jobRepository.findByIdAndBrand_Id(jobId, user.getBrand().getId())
+                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없거나 접근 권한이 없습니다."));
 
         List<ImageGenerationResult> results = resultRepository.findByJobIdOrderByOutputIndexAsc(jobId);
         List<ImageGenerationResultRespDto> resultDtos = toResultDtos(results);
@@ -316,17 +315,17 @@ public class ImageGenerationService {
                 """.formatted(keys.toString().trim());
     }
 
-    private List<ReferenceAssetInput> resolveReferenceAssets(String referenceJson) {
+    private List<ReferenceAssetInput> resolveReferenceAssets(String referenceJson, Long brandId) {
         JsonNode root = parseReferenceJson(referenceJson);
         if (root == null || root.isMissingNode() || root.isNull() || root.isEmpty()) {
             return List.of();
         }
 
         List<ReferenceAssetInput> references = new ArrayList<>();
-        addProductImages(references, root.path("productImages"));
-        addSingleReference(references, "modelImage", root.path("modelImage"));
-        addSingleReference(references, "poseImage", root.path("poseImage"));
-        addSingleReference(references, "backgroundImage", root.path("backgroundImage"));
+        addProductImages(references, root.path("productImages"), brandId);
+        addSingleReference(references, "modelImage", root.path("modelImage"), brandId);
+        addSingleReference(references, "poseImage", root.path("poseImage"), brandId);
+        addSingleReference(references, "backgroundImage", root.path("backgroundImage"), brandId);
 
         if (references.size() > 14) {
             throw new IllegalArgumentException("참조 이미지는 최대 14장까지만 첨부할 수 있습니다.");
@@ -347,7 +346,7 @@ public class ImageGenerationService {
         }
     }
 
-    private void addProductImages(List<ReferenceAssetInput> references, JsonNode node) {
+    private void addProductImages(List<ReferenceAssetInput> references, JsonNode node, Long brandId) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return;
         }
@@ -355,27 +354,31 @@ public class ImageGenerationService {
         if (node.isArray()) {
             int index = 0;
             for (JsonNode item : node) {
-                addReference(references, "productImages[" + index + "]", item);
+                addReference(references, "productImages[" + index + "]", item, brandId);
                 index++;
             }
             return;
         }
 
-        addReference(references, "productImages[0]", node);
+        addReference(references, "productImages[0]", node, brandId);
     }
 
-    private void addSingleReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+    private void addSingleReference(List<ReferenceAssetInput> references, String key, JsonNode node, Long brandId) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return;
         }
 
-        addReference(references, key, node);
+        addReference(references, key, node, brandId);
     }
 
-    private void addReference(List<ReferenceAssetInput> references, String key, JsonNode node) {
+    private void addReference(List<ReferenceAssetInput> references, String key, JsonNode node, Long brandId) {
         Long assetId = extractAssetId(node);
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("참조 이미지를 찾을 수 없습니다. assetId=" + assetId));
+
+        if (asset.getProduct() != null && !asset.getProduct().getBrand().getId().equals(brandId)) {
+            throw new IllegalArgumentException("참조 이미지가 로그인 사용자의 브랜드에 속하지 않습니다. assetId=" + assetId);
+        }
 
         references.add(new ReferenceAssetInput(key, asset));
     }

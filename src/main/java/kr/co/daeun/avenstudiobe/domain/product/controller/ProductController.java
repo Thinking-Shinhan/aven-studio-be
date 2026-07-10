@@ -9,8 +9,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import kr.co.daeun.avenstudiobe.domain.product.dto.ProductListRespDto;
-import kr.co.daeun.avenstudiobe.domain.product.dto.ProductRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
+import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
 import kr.co.daeun.avenstudiobe.global.exception.ErrorResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -18,12 +19,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -33,6 +33,7 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final UsersService usersService;
 
     @GetMapping
     @Operation(summary = "상품 목록 조회", description = "카테고리, 색상, 성별, 키워드 조건으로 필터링된 상품 목록을 페이지 형태로 조회합니다.")
@@ -60,10 +61,19 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @ParameterObject
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
-            Pageable pageable
+            Pageable pageable,
+            Authentication authentication
             ){
 
-        ProductListRespDto products = productService.getProductList(category, color, gender, keyword, pageable);
+        User user = usersService.findByLoginId(authentication.getName());
+        ProductListRespDto products = productService.getProductList(
+                user.getBrand().getId(),
+                category,
+                color,
+                gender,
+                keyword,
+                pageable
+        );
 
         return ResponseEntity.ok().body(products);
     }

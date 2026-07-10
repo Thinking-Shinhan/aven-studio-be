@@ -10,18 +10,21 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("""
     SELECT p
     FROM Product p
-    WHERE p.category IN :categories
+    WHERE p.brand.id = :brandId
+      AND p.category IN :categories
       AND (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
 """)
     Page<Product> searchProductsWithCategory(
+            @Param("brandId") Long brandId,
             @Param("categories") List<String> categories,
             @Param("color") String color,
             @Param("gender") String gender,
@@ -32,11 +35,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("""
     SELECT p
     FROM Product p
-    WHERE (:color IS NULL OR p.color = :color)
+    WHERE p.brand.id = :brandId
+      AND (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
 """)
     Page<Product> searchProductsWithoutCategory(
+            @Param("brandId") Long brandId,
             @Param("color") String color,
             @Param("gender") String gender,
             @Param("keywordPattern") String keywordPattern,
@@ -44,4 +49,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     );
 
     Product findProductByBrandAndCode(Brand brand, String code);
+
+    Optional<Product> findByIdAndBrand_Id(Long id, Long brandId);
 }

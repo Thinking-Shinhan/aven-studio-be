@@ -5,12 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
-import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
 import kr.co.daeun.avenstudiobe.domain.brandmood.dto.*;
 import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
-import kr.co.daeun.avenstudiobe.global.exception.BrandNotFoundException;
 import kr.co.daeun.avenstudiobe.integration.anthropic.AnthropicMoodClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,45 +26,28 @@ public class BrandMoodService {
     private static final long MAX_PDF_SIZE_BYTES = 20L * 1024 * 1024;
 
     private final BrandMoodRepository brandMoodRepository;
-    private final BrandRepository brandRepository;
     private final AnthropicMoodClient anthropicMoodClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public BrandMoodAnalysisRespDto analyze(Long brandId, BrandMoodAnalyzeReqDto request, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
+    public BrandMoodAnalysisRespDto analyze(BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
+        Brand brand = user.getBrand();
+        validateRequiredSourceUrl(request);
 
         String systemPrompt = buildAnalyzeSystemPrompt();
         String userPrompt = buildAnalyzeUserPrompt(brand, request);
+
+        if (hasPdf(file)) {
+            validatePdf(file);
+            String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
+            return parseAnalysisResponse(request, claudeText, "PDF");
+        }
+
         String claudeText = anthropicMoodClient.analyzeBrandMood(systemPrompt, userPrompt);
-        return parseAnalysisResponse(request, claudeText, "TEXT");
+        return parseAnalysisResponse(request, claudeText, "URL");
     }
 
-    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
-        validatePdf(file);
-
-        String systemPrompt = buildAnalyzeSystemPrompt();
-        String userPrompt = buildAnalyzeUserPrompt(brand, request);
-        String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
-        return parseAnalysisResponse(request, claudeText, "PDF");
-    }
-
-    public BrandMoodAnalysisRespDto analyzePdf(Long brandId, String requestJson, MultipartFile file, User user) {
-        return analyzePdf(brandId, parseAnalyzeRequest(requestJson), file, user);
-    }
-
-    private BrandMoodAnalyzeReqDto parseAnalyzeRequest(String requestJson) {
-        if (requestJson == null || requestJson.isBlank()) {
-            throw new IllegalArgumentException("request JSON을 입력해주세요.");
-        }
-
-        try {
-            return objectMapper.readValue(requestJson, BrandMoodAnalyzeReqDto.class);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("request JSON 형식이 올바르지 않습니다.", e);
-        }
+    private boolean hasPdf(MultipartFile file) {
+        return file != null && !file.isEmpty();
     }
 
     private BrandMoodAnalysisRespDto parseAnalysisResponse(
@@ -101,9 +82,9 @@ public class BrandMoodService {
     }
 
     @Transactional
-    public BrandMoodRespDto save(Long brandId, BrandMoodSaveReqDto request, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
+    public BrandMoodRespDto save(BrandMoodSaveReqDto request, User user) {
+        Brand brand = user.getBrand();
+        Long brandId = brand.getId();
 
         int version = brandMoodRepository.findTopByBrandIdOrderByVersionDesc(brandId)
                 .map(brandMood -> brandMood.getVersion() + 1)
@@ -134,8 +115,8 @@ public class BrandMoodService {
     }
 
     @Transactional(readOnly = true)
-    public BrandMoodRespDto get(Long brandId, Long brandMoodId, User user) {
-        validateBrandOwner(user, brandId);
+    public BrandMoodRespDto get(Long brandMoodId, User user) {
+        Long brandId = user.getBrand().getId();
 
         BrandMood brandMood = brandMoodRepository.findById(brandMoodId)
                 .orElseThrow(() -> new IllegalArgumentException("브랜드 무드를 찾을 수 없습니다."));
@@ -157,14 +138,9 @@ public class BrandMoodService {
         );
     }
 
-    private Brand findBrand(Long brandId) {
-        return brandRepository.findById(brandId)
-                .orElseThrow(BrandNotFoundException::new);
-    }
-
-    private void validateBrandOwner(User user, Long brandId) {
-        if (!user.getBrand().getId().equals(brandId)) {
-            throw new IllegalArgumentException("로그인 사용자의 브랜드와 요청 브랜드가 일치하지 않습니다.");
+    private void validateRequiredSourceUrl(BrandMoodAnalyzeReqDto request) {
+        if (request.getSourceUrl() == null || request.getSourceUrl().isBlank()) {
+            throw new IllegalArgumentException("브랜드 무드 분석을 위한 sourceUrl을 입력해주세요.");
         }
     }
 
