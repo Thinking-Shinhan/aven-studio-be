@@ -31,11 +31,8 @@ public class FallbackPlacementService {
 
         List<ImagePlacementRespDto> placements = new ArrayList<>();
         Set<Long> usedAssetIds = new HashSet<>();
-        int frontLimit = (int) Math.ceil(slots.size() * 0.5);
-
         for (PlacementSlot slot : slots) {
-            boolean frontSlot = slot.globalSlotOrder() != null && slot.globalSlotOrder() <= frontLimit;
-            AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, frontSlot);
+            AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, placementPhase(slot));
 
             if (asset == null) {
                 continue;
@@ -51,30 +48,53 @@ public class FallbackPlacementService {
     private AssetPlacementCandidate chooseAsset(
             List<AssetPlacementCandidate> assets,
             Set<Long> usedAssetIds,
-            boolean frontSlot
+            PlacementPhase phase
     ) {
         return assets.stream()
                 .filter(asset -> asset.assetId() != null && !usedAssetIds.contains(asset.assetId()))
-                .sorted(Comparator.comparingInt(asset -> priority(asset.assetRole(), frontSlot)))
+                .sorted(Comparator.comparingInt(asset -> priority(asset.assetRole(), phase)))
                 .findFirst()
                 .orElse(null);
     }
 
-    private int priority(String assetRole, boolean frontSlot) {
-        AssetRoleGroup group = classify(assetRole);
-
-        if (frontSlot) {
-            return switch (group) {
-                case MODEL, PRODUCT -> 0;
-                case DETAIL, MATERIAL -> 1;
-                case OTHER -> 2;
-            };
+    private PlacementPhase placementPhase(PlacementSlot slot) {
+        Integer order = slot.globalSlotOrder();
+        if (order == null || order <= 1) {
+            return PlacementPhase.HERO;
         }
 
-        return switch (group) {
-            case DETAIL, MATERIAL -> 0;
-            case PRODUCT, MODEL -> 1;
-            case OTHER -> 2;
+        if (order <= 3) {
+            return PlacementPhase.PRODUCT_OVERVIEW;
+        }
+
+        return PlacementPhase.DETAIL_OR_MOOD;
+    }
+
+    private int priority(String assetRole, PlacementPhase phase) {
+        AssetRoleGroup group = classify(assetRole);
+
+        return switch (phase) {
+            case HERO -> switch (group) {
+                case MODEL -> 0;
+                case PRODUCT_FRONT, PRODUCT -> 1;
+                case PRODUCT_BACK -> 2;
+                case DETAIL, MATERIAL -> 3;
+                case OTHER -> 4;
+            };
+            case PRODUCT_OVERVIEW -> switch (group) {
+                case PRODUCT_FRONT -> 0;
+                case PRODUCT_BACK -> 1;
+                case PRODUCT -> 2;
+                case MODEL -> 3;
+                case DETAIL, MATERIAL -> 4;
+                case OTHER -> 5;
+            };
+            case DETAIL_OR_MOOD -> switch (group) {
+                case DETAIL, MATERIAL -> 0;
+                case MODEL -> 1;
+                case PRODUCT_FRONT, PRODUCT_BACK, PRODUCT -> 2;
+                case OTHER -> 3;
+            };
         };
     }
 
@@ -87,6 +107,14 @@ public class FallbackPlacementService {
 
         if (normalized.contains("MODEL")) {
             return AssetRoleGroup.MODEL;
+        }
+
+        if (normalized.contains("PRODUCT_FRONT") || normalized.contains("FRONT")) {
+            return AssetRoleGroup.PRODUCT_FRONT;
+        }
+
+        if (normalized.contains("PRODUCT_BACK") || normalized.contains("BACK")) {
+            return AssetRoleGroup.PRODUCT_BACK;
         }
 
         if (normalized.contains("DETAIL")) {
@@ -118,9 +146,17 @@ public class FallbackPlacementService {
 
     private enum AssetRoleGroup {
         MODEL,
+        PRODUCT_FRONT,
+        PRODUCT_BACK,
         PRODUCT,
         DETAIL,
         MATERIAL,
         OTHER
+    }
+
+    private enum PlacementPhase {
+        HERO,
+        PRODUCT_OVERVIEW,
+        DETAIL_OR_MOOD
     }
 }

@@ -43,9 +43,11 @@ public class AutoImagePlacementService {
                 return new AutoImagePlacementRespDto(context.productId(), placements);
             }
 
+            log.warn("Auto image placement AI returned no valid placements. fallback will be used. productId={}",
+                    context.productId());
             return fallbackPlacementService.place(context);
         } catch (Exception e) {
-            log.debug("Auto image placement AI flow failed. fallback will be used. productId={}",
+            log.warn("Auto image placement AI flow failed. fallback will be used. productId={}",
                     context.productId(), e);
             return fallbackPlacementService.place(context);
         }
