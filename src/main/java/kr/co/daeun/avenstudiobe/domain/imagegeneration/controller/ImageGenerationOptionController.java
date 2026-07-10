@@ -31,10 +31,8 @@ public class ImageGenerationOptionController {
     }
 
     @GetMapping("/shot-templates")
-    public ResponseEntity<ShotTemplateListRespDto> getShotTemplates(
-            @RequestParam(defaultValue = "PRODUCT_CUT") String cutType
-    ) {
-        ShotTemplateListRespDto shotTemplates = imageGenerationOptionService.getShotTemplates(cutType);
+    public ResponseEntity<ShotTemplateListRespDto> getShotTemplates() {
+        ShotTemplateListRespDto shotTemplates = imageGenerationOptionService.getShotTemplates();
 
         return ResponseEntity.ok().body(shotTemplates);
     }
@@ -55,7 +53,8 @@ public class ImageGenerationOptionController {
             @RequestParam("key") String key,
             @RequestParam("label") String label,
             @RequestParam(required = false) String description,
-            @RequestParam(defaultValue = "0") Integer sortOrder
+            @RequestParam(defaultValue = "0") Integer sortOrder,
+            @RequestParam(required = false) String promptText
     ) {
         ReferenceAssetRespDto referenceAsset = imageGenerationOptionService.uploadReferenceAsset(
                 file,
@@ -63,7 +62,8 @@ public class ImageGenerationOptionController {
                 key,
                 label,
                 description,
-                sortOrder
+                sortOrder,
+                promptText
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(referenceAsset);
