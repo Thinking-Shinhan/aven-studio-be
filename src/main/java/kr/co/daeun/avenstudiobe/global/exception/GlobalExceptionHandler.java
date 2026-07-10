@@ -3,6 +3,7 @@ package kr.co.daeun.avenstudiobe.global.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -52,6 +53,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .badRequest()
                 .body(ErrorResponse.of("BAD_REQUEST", getRequestParameterMessage(e.getName())));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of("BAD_REQUEST", "요청 JSON 형식이 올바르지 않습니다."));
     }
 
     @ExceptionHandler(IllegalStateException.class)
