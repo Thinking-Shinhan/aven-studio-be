@@ -45,7 +45,7 @@ public class AssetTestController {
                 status
         );
 
-        return ResponseEntity.ok(toFullAssetResponse(asset));
+        return ResponseEntity.ok(toFullAssetResponse(asset, productId));
     }
 
     @PostMapping("/{productId}")
@@ -82,7 +82,7 @@ public class AssetTestController {
         return ResponseEntity.ok(assetService.getProductImages(productId));
     }
 
-    private Map<String, Object> toFullAssetResponse(Asset asset) {
+    private Map<String, Object> toFullAssetResponse(Asset asset, Long productId) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("assetId", asset.getId());
         response.put("type", asset.getType());
@@ -96,7 +96,7 @@ public class AssetTestController {
         response.put("description", asset.getDescription());
         response.put("status", asset.getStatus());
         response.put("createdAt", asset.getCreatedAt());
-        response.put("productId", asset.getProduct().getId());
+        response.put("productId", productId);
         return response;
     }
 }
