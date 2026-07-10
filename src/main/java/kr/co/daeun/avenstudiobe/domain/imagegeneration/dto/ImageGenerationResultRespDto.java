@@ -10,6 +10,8 @@ public class ImageGenerationResultRespDto {
 
     private Long resultId;
     private Long assetId;
+    private String assetRole;
+    private String description;
     private int outputIndex;
     private String status;
     private String imageUrl;
@@ -21,6 +23,8 @@ public class ImageGenerationResultRespDto {
         return new ImageGenerationResultRespDto(
                 result.getId(),
                 assetId,
+                result.getAsset() == null ? null : result.getAsset().getAssetRole(),
+                result.getAsset() == null ? null : result.getAsset().getDescription(),
                 result.getOutputIndex(),
                 result.getStatus(),
                 imageUrl,
@@ -38,6 +42,8 @@ public class ImageGenerationResultRespDto {
         return new ImageGenerationResultRespDto(
                 result.getId(),
                 assetId,
+                result.getAsset() == null ? null : result.getAsset().getAssetRole(),
+                result.getAsset() == null ? null : result.getAsset().getDescription(),
                 result.getOutputIndex(),
                 result.getStatus(),
                 imageUrl,

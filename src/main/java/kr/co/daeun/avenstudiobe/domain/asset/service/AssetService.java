@@ -25,7 +25,6 @@ public class AssetService {
     private static final String IMAGE_TYPE = "IMAGE";
     private static final String ACTIVE_STATUS = "ACTIVE";
     private static final String DEFAULT_PRODUCT_IMAGE_ROLE = "PRODUCT_IMAGE";
-    private static final String GENERATED_RESULT_ROLE = "GENERATED_RESULT";
     private static final Set<String> CLIENT_UPLOAD_ROLES = Set.of(
             "PRODUCT_FRONT",
             "PRODUCT_BACK",
@@ -166,20 +165,23 @@ public class AssetService {
             String contentType,
             Product product,
             Long jobId,
-            String prompt
+            String prompt,
+            String assetRole,
+            String description
     ) {
         GcsService.UploadedFile uploaded = gcsService.uploadGeneratedImage(bytes, contentType, product.getId(), jobId);
 
         try {
             Asset asset = Asset.builder()
                     .type("GENERATED")
-                    .assetRole(GENERATED_RESULT_ROLE)
                     .fileUrl(uploaded.fileUrl())
                     .objectName(uploaded.objectName())
                     .originalFilename(uploaded.originalFilename())
                     .contentType(uploaded.contentType())
                     .size(uploaded.size())
                     .prompt(prompt)
+                    .assetRole(assetRole)
+                    .description(description)
                     .status("GENERATED")
                     .product(product)
                     .build();
@@ -233,7 +235,8 @@ public class AssetService {
                 asset.getObjectName(),
                 asset.getOriginalFilename(),
                 asset.getContentType(),
-                asset.getSize()
+                asset.getSize(),
+                asset.getDescription()
         );
     }
 
@@ -258,7 +261,8 @@ public class AssetService {
             String objectName,
             String originalFilename,
             String contentType,
-            long size
+            long size,
+            String description
     ) {}
 
     private List<String> normalizeAndValidateAssetRoles(List<String> assetRoles, Long productId) {

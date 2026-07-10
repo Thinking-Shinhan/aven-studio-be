@@ -33,6 +33,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -52,6 +53,33 @@ public class ImageGenerationService {
     private final GoogleAiImageProvider googleAiImageProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RestClient restClient = RestClient.create();
+
+    private static final Map<String, String> COLOR_TEMPERATURE_LABELS = Map.of(
+            "WARM", "웜톤",
+            "NEUTRAL", "뉴트럴",
+            "COOL", "쿨톤"
+    );
+    private static final Map<String, String> CAMERA_ANGLE_LABELS = Map.of(
+            "EYE_LEVEL_FRONT", "정면",
+            "LEFT_THREE_QUARTER_45", "좌측 45도 사선",
+            "RIGHT_THREE_QUARTER_45", "우측 45도 사선",
+            "BACK_VIEW", "후면"
+    );
+    private static final Map<String, String> FRAMING_LABELS = Map.of(
+            "FULL_BODY", "전신",
+            "THREE_QUARTER_BODY", "3/4 전신",
+            "HALF_BODY", "반신",
+            "CLOSE_UP", "클로즈업",
+            "WIDE_MARGIN", "여백 강조"
+    );
+    private static final Map<String, String> ASPECT_RATIO_LABELS = Map.of(
+            "RATIO_1_1", "1:1",
+            "RATIO_2_3", "2:3",
+            "RATIO_3_4", "3:4",
+            "RATIO_4_5", "4:5",
+            "RATIO_16_9", "16:9",
+            "RATIO_9_16", "9:16"
+    );
 
     @Value("${image-generation.gcs-save-enabled:true}")
     private boolean gcsSaveEnabled;
@@ -165,6 +193,7 @@ public class ImageGenerationService {
                 .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+        GeneratedAssetMetadata metadata = buildGeneratedAssetMetadata(job);
 
         List<ImageGenerationResult> results = new ArrayList<>();
 
@@ -175,7 +204,9 @@ public class ImageGenerationService {
                     generatedImage.contentType(),
                     product,
                     job.getId(),
-                    prompt
+                    prompt,
+                    metadata.assetRole(),
+                    metadata.description()
             );
 
             ImageGenerationResult result = ImageGenerationResult.generated(job, asset, i);
@@ -672,6 +703,141 @@ public class ImageGenerationService {
         return generationMode.trim().toUpperCase();
     }
 
+    private GeneratedAssetMetadata buildGeneratedAssetMetadata(ImageGenerationJob job) {
+        JsonNode userOptions = readStoredJson(job.getUserOptionsJson());
+        JsonNode references = readStoredJson(job.getReferenceJson());
+        String normalizedCutType = normalizeValue(job.getCutType());
+
+        if ("MODEL_CUT".equals(normalizedCutType)) {
+            return buildModelCutMetadata(userOptions, references);
+        }
+
+        return buildProductCutMetadata(userOptions, references);
+    }
+
+    private GeneratedAssetMetadata buildModelCutMetadata(JsonNode userOptions, JsonNode references) {
+        String framing = optionValue(userOptions, "framing");
+        String cameraAngle = optionLabel(userOptions, "cameraAngle", CAMERA_ANGLE_LABELS);
+        String framingLabel = FRAMING_LABELS.get(framing);
+        String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
+        String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
+        String poseLabel = referenceAssetLabel(references, "poseReferenceId");
+        String backgroundLabel = referenceAssetLabel(references, "backgroundReferenceId");
+
+        List<String> sentences = new ArrayList<>();
+        sentences.add("모델 착장컷.");
+        addSentence(sentences, joinWithSpace(cameraAngle, framingLabel, "구도"));
+        addSentence(sentences, textWithSuffix(poseLabel, " 포즈를 반영했다"));
+        addSentence(sentences, textWithSuffix(colorTemperature, " 색감으로 생성되었다"));
+        addSentence(sentences, textWithSuffix(backgroundLabel, " 배경 무드를 반영했다"));
+        addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
+
+        return new GeneratedAssetMetadata(
+                FRAMING_LABELS.containsKey(framing) ? framing : "GENERATED_IMAGE",
+                String.join(" ", sentences)
+        );
+    }
+
+    private GeneratedAssetMetadata buildProductCutMetadata(JsonNode userOptions, JsonNode references) {
+        String productView = optionValue(userOptions, "productView");
+        String shotReferenceLabel = referenceAssetLabel(references, "shotReferenceId");
+        String shotReferenceKey = referenceAssetKey(references, "shotReferenceId");
+        String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
+        String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
+        String normalizedProductView = normalizeValue(productView);
+
+        List<String> sentences = new ArrayList<>();
+        sentences.add("제품 단독컷.");
+        addSentence(sentences, textWithSuffix(shotReferenceLabel, " 구도를 반영했다"));
+        addSentence(sentences, textWithSuffix(colorTemperature, " 색감으로 생성되었다"));
+        addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
+
+        return new GeneratedAssetMetadata(
+                normalizedProductView != null
+                        ? normalizedProductView
+                        : shotReferenceKey == null ? "PRODUCT_CUT" : shotReferenceKey,
+                String.join(" ", sentences)
+        );
+    }
+
+    private JsonNode readStoredJson(String jsonText) {
+        if (jsonText == null || jsonText.isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+
+        try {
+            return objectMapper.readTree(jsonText);
+        } catch (JacksonException e) {
+            return objectMapper.createObjectNode();
+        }
+    }
+
+    private String optionLabel(JsonNode options, String key, Map<String, String> labels) {
+        String value = optionValue(options, key);
+        return labels.get(value);
+    }
+
+    private String optionValue(JsonNode options, String key) {
+        if (options == null || options.isMissingNode() || options.isNull()) {
+            return null;
+        }
+
+        return normalizeValue(options.path(key).asText(null));
+    }
+
+    private String referenceAssetLabel(JsonNode references, String key) {
+        return findReferenceAsset(references, key)
+                .map(ReferenceAsset::getName)
+                .orElse(null);
+    }
+
+    private String referenceAssetKey(JsonNode references, String key) {
+        return findReferenceAsset(references, key)
+                .map(ReferenceAsset::getReferenceKey)
+                .map(this::normalizeValue)
+                .orElse(null);
+    }
+
+    private java.util.Optional<ReferenceAsset> findReferenceAsset(JsonNode references, String key) {
+        if (references == null || references.isMissingNode() || references.isNull()) {
+            return java.util.Optional.empty();
+        }
+
+        JsonNode referenceIdNode = references.path(key);
+        if (!referenceIdNode.isNumber()) {
+            return java.util.Optional.empty();
+        }
+
+        return referenceAssetRepository.findById(referenceIdNode.asLong());
+    }
+
+    private String normalizeValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return value.trim().toUpperCase();
+    }
+
+    private String joinWithSpace(String first, String second, String suffix) {
+        if (first == null && second == null) {
+            return null;
+        }
+
+        String value = first == null ? second : second == null ? first : first + " " + second;
+        return value + " " + suffix.trim();
+    }
+
+    private String textWithSuffix(String value, String suffix) {
+        return value == null ? null : value + suffix;
+    }
+
+    private void addSentence(List<String> sentences, String sentence) {
+        if (sentence != null && !sentence.isBlank()) {
+            sentences.add(sentence + ".");
+        }
+    }
+
     private String normalizeJson(JsonNode json) {
         if (json == null || json.isMissingNode() || json.isNull()) {
             return "{}";
@@ -702,6 +868,12 @@ public class ImageGenerationService {
             String sourceLabel,
             byte[] bytes,
             String contentType
+    ) {
+    }
+
+    private record GeneratedAssetMetadata(
+            String assetRole,
+            String description
     ) {
     }
 }
