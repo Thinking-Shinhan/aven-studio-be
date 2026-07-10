@@ -96,8 +96,7 @@ public class ImageGenerationOptionService {
             String key,
             String label,
             String description,
-            Integer sortOrder,
-            String promptText
+            Integer sortOrder
     ) {
         String normalizedAssetType = normalizeRequiredAssetType(assetType);
         String normalizedKey = normalizeReferenceKey(key);
@@ -120,7 +119,6 @@ public class ImageGenerationOptionService {
                     .description(description)
                     .active(true)
                     .sortOrder(sortOrder == null ? 0 : sortOrder)
-                    .promptText(promptText)
                     .build();
 
             return toReferenceAssetResponse(referenceAssetRepository.save(referenceAsset));
@@ -178,7 +176,6 @@ public class ImageGenerationOptionService {
                 asset.getId(),
                 asset.getReferenceKey(),
                 asset.getName(),
-                asset.getPromptText(),
                 asset.getDescription(),
                 getReferenceAssetImageUrl(asset)
         );
