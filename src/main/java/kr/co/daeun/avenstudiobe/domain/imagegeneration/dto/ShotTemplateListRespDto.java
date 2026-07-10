@@ -9,6 +9,5 @@ import java.util.List;
 @AllArgsConstructor
 public class ShotTemplateListRespDto {
 
-    private String cutType;
     private List<ShotTemplateRespDto> shotTemplates;
 }
