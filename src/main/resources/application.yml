@@ -42,6 +42,7 @@ google:
   ai:
     api-key: ${GOOGLE_AI_API_KEY:}
     image-model: ${GOOGLE_AI_IMAGE_MODEL:gemini-2.5-flash-image}
+    timeout-seconds: ${GOOGLE_AI_TIMEOUT_SECONDS:120}
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
   model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
