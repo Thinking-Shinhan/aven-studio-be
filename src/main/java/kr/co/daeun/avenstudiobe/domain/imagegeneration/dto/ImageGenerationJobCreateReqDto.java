@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -22,9 +23,9 @@ public class ImageGenerationJobCreateReqDto {
 
     private String negativePrompt;
 
-    private String userOptionsJson = "{}";
+    private JsonNode userOptionsJson;
 
-    private String referenceJson = "{}";
+    private JsonNode referenceJson;
 
     @Min(1)
     @Max(4)

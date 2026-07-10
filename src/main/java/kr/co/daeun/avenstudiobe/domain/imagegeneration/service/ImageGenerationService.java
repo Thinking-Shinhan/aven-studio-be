@@ -388,7 +388,7 @@ public class ImageGenerationService {
                 """.formatted(keys.toString().trim());
     }
 
-    private List<ReferenceAssetInput> resolveReferenceAssets(String referenceJson, Long brandId) {
+    private List<ReferenceAssetInput> resolveReferenceAssets(JsonNode referenceJson, Long brandId) {
         JsonNode root = parseReferenceJson(referenceJson);
         if (root == null || root.isMissingNode() || root.isNull() || root.isEmpty()) {
             return List.of();
@@ -412,13 +412,22 @@ public class ImageGenerationService {
         return references;
     }
 
-    private JsonNode parseReferenceJson(String referenceJson) {
-        if (referenceJson == null || referenceJson.isBlank()) {
+    private JsonNode parseReferenceJson(JsonNode referenceJson) {
+        if (referenceJson == null || referenceJson.isMissingNode() || referenceJson.isNull()) {
+            return objectMapper.createObjectNode();
+        }
+
+        if (!referenceJson.isTextual()) {
+            return referenceJson;
+        }
+
+        String jsonText = referenceJson.asText();
+        if (jsonText == null || jsonText.isBlank()) {
             return objectMapper.createObjectNode();
         }
 
         try {
-            return objectMapper.readTree(referenceJson);
+            return objectMapper.readTree(jsonText);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("referenceJson 형식이 올바르지 않습니다.", e);
         }
@@ -663,12 +672,25 @@ public class ImageGenerationService {
         return generationMode.trim().toUpperCase();
     }
 
-    private String normalizeJson(String json) {
-        if (json == null || json.isBlank()) {
+    private String normalizeJson(JsonNode json) {
+        if (json == null || json.isMissingNode() || json.isNull()) {
             return "{}";
         }
 
-        return json;
+        if (json.isTextual()) {
+            String jsonText = json.asText();
+            if (jsonText == null || jsonText.isBlank()) {
+                return "{}";
+            }
+
+            return jsonText;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(json);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("JSON 형식이 올바르지 않습니다.", e);
+        }
     }
 
     private int elapsedMs(long startedAt) {
