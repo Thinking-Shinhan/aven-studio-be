@@ -126,6 +126,41 @@ public class AssetService {
     }
 
     @Transactional
+    public Asset uploadTestAssetWithMetadata(
+            MultipartFile file,
+            Product product,
+            String type,
+            String assetRole,
+            String prompt,
+            String description,
+            String status
+    ) {
+        GcsService.UploadedFile uploaded = gcsService.upload(file, product.getId());
+
+        try {
+            Asset asset = Asset.builder()
+                    .type(requiredText(type, "type"))
+                    .assetRole(requiredText(assetRole, "assetRole"))
+                    .fileUrl(uploaded.fileUrl())
+                    .objectName(uploaded.objectName())
+                    .originalFilename(uploaded.originalFilename())
+                    .contentType(uploaded.contentType())
+                    .size(uploaded.size())
+                    .prompt(requiredText(prompt, "prompt"))
+                    .description(requiredText(description, "description"))
+                    .status(requiredText(status, "status"))
+                    .product(product)
+                    .build();
+
+            return assetRepository.saveAndFlush(asset);
+
+        } catch (RuntimeException e) {
+            gcsService.deleteQuietly(uploaded.objectName());
+            throw e;
+        }
+    }
+
+    @Transactional
     public Asset saveGeneratedImage(
             byte[] bytes,
             String contentType,
@@ -277,6 +312,14 @@ public class AssetService {
 
     private boolean isSingleSlotRole(String assetRole) {
         return SINGLE_SLOT_ROLES.contains(assetRole);
+    }
+
+    private String requiredText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " is required.");
+        }
+
+        return value.trim();
     }
 
     private String getSingleSlotDuplicateMessage(String assetRole) {
