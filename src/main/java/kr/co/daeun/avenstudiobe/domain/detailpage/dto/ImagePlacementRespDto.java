@@ -7,9 +7,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public class ImagePlacementRespDto {
 
-    private Integer blockOrder;
     private String instanceKey;
-    private String templateKey;
     private String slotKey;
     private Long assetId;
     private String fileUrl;

@@ -22,6 +22,15 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("CONFLICT", e.getMessage()));
     }
 
+    @ExceptionHandler(AutoPlacementInsufficientImageException.class)
+    public ResponseEntity<ErrorResponse> handleAutoPlacementInsufficientImage(
+            AutoPlacementInsufficientImageException e
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CONFLICT", e.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
         String message = e.getBindingResult()
@@ -109,7 +118,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidCategoryException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCategoryException(InvalidCategoryException e) {
-
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
@@ -117,7 +125,6 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidGenderException.class)
     public ResponseEntity<ErrorResponse> handleInvalidGenderException(InvalidGenderException e) {
-
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
@@ -132,7 +139,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(SheetAccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleSheetAccessDenied(SheetAccessDeniedException e) {
-        log.error("스프레드시트 접근 권한 에러", e);
+        log.error("스프레드시트 접근 권한 오류", e);
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("FORBIDDEN", "스프레드시트에 접근할 수 없습니다. 공유 권한을 확인해주세요."));
@@ -183,7 +190,7 @@ public class GlobalExceptionHandler {
 
     private String getRequestParameterMessage(String parameterName) {
         if ("productId".equals(parameterName)) {
-            return "상품 ID 형식이 올바르지 않습니다.";
+            return "상품 ID는 필수입니다.";
         }
 
         return "요청 파라미터 형식이 올바르지 않습니다.";
