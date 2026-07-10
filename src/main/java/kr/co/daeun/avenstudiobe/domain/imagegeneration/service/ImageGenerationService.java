@@ -460,7 +460,7 @@ public class ImageGenerationService {
 
     private void addReference(List<ReferenceAssetInput> references, String key, JsonNode node, Long brandId) {
         Long assetId = extractAssetId(node);
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetRepository.findByIdWithProductAndBrand(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("참조 이미지를 찾을 수 없습니다. assetId=" + assetId));
 
         if (asset.getProduct() != null && !asset.getProduct().getBrand().getId().equals(brandId)) {
@@ -570,7 +570,7 @@ public class ImageGenerationService {
             Long brandId
     ) {
         Long assetId = extractAssetId(node);
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetRepository.findByIdWithProductAndBrand(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("착장 상품 이미지를 찾을 수 없습니다. assetId=" + assetId));
 
         if (asset.getProduct() == null || !asset.getProduct().getBrand().getId().equals(brandId)) {
