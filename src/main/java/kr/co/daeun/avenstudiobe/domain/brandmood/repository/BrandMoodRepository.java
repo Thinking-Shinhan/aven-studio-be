@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface BrandMoodRepository extends JpaRepository<BrandMood, Long> {
 
     Optional<BrandMood> findTopByBrandIdOrderByVersionDesc(Long brandId);
+
+    Optional<BrandMood> findTopByBrandIdAndActiveTrueOrderByVersionDesc(Long brandId);
 }

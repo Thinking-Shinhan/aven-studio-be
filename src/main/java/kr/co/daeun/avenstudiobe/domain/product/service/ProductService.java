@@ -21,6 +21,7 @@ public class ProductService {
     private final ProductRepository productRepository;
 
     public ProductListRespDto getProductList(
+            Long brandId,
             String category,
             String color,
             String gender,
@@ -44,6 +45,7 @@ public class ProductService {
 
         if (searchCategories == null) {
             productPage = productRepository.searchProductsWithoutCategory(
+                    brandId,
                     normalizedColor,
                     normalizedGender,
                     keywordPattern,
@@ -51,6 +53,7 @@ public class ProductService {
             );
         } else {
             productPage = productRepository.searchProductsWithCategory(
+                    brandId,
                     searchCategories,
                     normalizedColor,
                     normalizedGender,

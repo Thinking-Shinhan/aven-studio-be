@@ -17,12 +17,14 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("""
     SELECT p
     FROM Product p
-    WHERE p.category IN :categories
+    WHERE p.brand.id = :brandId
+      AND p.category IN :categories
       AND (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
 """)
     Page<Product> searchProductsWithCategory(
+            @Param("brandId") Long brandId,
             @Param("categories") List<String> categories,
             @Param("color") String color,
             @Param("gender") String gender,
@@ -33,11 +35,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("""
     SELECT p
     FROM Product p
-    WHERE (:color IS NULL OR p.color = :color)
+    WHERE p.brand.id = :brandId
+      AND (:color IS NULL OR p.color = :color)
       AND (:gender IS NULL OR p.gender = :gender)
       AND (:keywordPattern IS NULL OR p.name LIKE :keywordPattern)
 """)
     Page<Product> searchProductsWithoutCategory(
+            @Param("brandId") Long brandId,
             @Param("color") String color,
             @Param("gender") String gender,
             @Param("keywordPattern") String keywordPattern,

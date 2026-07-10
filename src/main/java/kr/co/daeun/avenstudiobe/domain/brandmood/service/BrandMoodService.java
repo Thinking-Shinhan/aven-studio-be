@@ -5,12 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
-import kr.co.daeun.avenstudiobe.domain.brand.repository.BrandRepository;
 import kr.co.daeun.avenstudiobe.domain.brandmood.dto.*;
 import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
-import kr.co.daeun.avenstudiobe.global.exception.BrandNotFoundException;
 import kr.co.daeun.avenstudiobe.integration.anthropic.AnthropicMoodClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,13 +26,11 @@ public class BrandMoodService {
     private static final long MAX_PDF_SIZE_BYTES = 20L * 1024 * 1024;
 
     private final BrandMoodRepository brandMoodRepository;
-    private final BrandRepository brandRepository;
     private final AnthropicMoodClient anthropicMoodClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public BrandMoodAnalysisRespDto analyze(Long brandId, BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
+    public BrandMoodAnalysisRespDto analyze(BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
+        Brand brand = user.getBrand();
         validateRequiredSourceUrl(request);
 
         String systemPrompt = buildAnalyzeSystemPrompt();
@@ -86,9 +82,9 @@ public class BrandMoodService {
     }
 
     @Transactional
-    public BrandMoodRespDto save(Long brandId, BrandMoodSaveReqDto request, User user) {
-        Brand brand = findBrand(brandId);
-        validateBrandOwner(user, brandId);
+    public BrandMoodRespDto save(BrandMoodSaveReqDto request, User user) {
+        Brand brand = user.getBrand();
+        Long brandId = brand.getId();
 
         int version = brandMoodRepository.findTopByBrandIdOrderByVersionDesc(brandId)
                 .map(brandMood -> brandMood.getVersion() + 1)
@@ -119,15 +115,11 @@ public class BrandMoodService {
     }
 
     @Transactional(readOnly = true)
-    public BrandMoodRespDto get(Long brandId, Long brandMoodId, User user) {
-        validateBrandOwner(user, brandId);
+    public BrandMoodRespDto getCurrent(User user) {
+        Long brandId = user.getBrand().getId();
 
-        BrandMood brandMood = brandMoodRepository.findById(brandMoodId)
-                .orElseThrow(() -> new IllegalArgumentException("브랜드 무드를 찾을 수 없습니다."));
-
-        if (!brandMood.getBrand().getId().equals(brandId)) {
-            throw new IllegalArgumentException("브랜드에 속한 무드가 아닙니다.");
-        }
+        BrandMood brandMood = brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(brandId)
+                .orElseThrow(() -> new IllegalArgumentException("활성화된 브랜드 무드가 없습니다."));
 
         return toResponse(brandMood);
     }
@@ -142,14 +134,9 @@ public class BrandMoodService {
         );
     }
 
-    private Brand findBrand(Long brandId) {
-        return brandRepository.findById(brandId)
-                .orElseThrow(BrandNotFoundException::new);
-    }
-
-    private void validateBrandOwner(User user, Long brandId) {
-        if (!user.getBrand().getId().equals(brandId)) {
-            throw new IllegalArgumentException("로그인 사용자의 브랜드와 요청 브랜드가 일치하지 않습니다.");
+    private void validateRequiredSourceUrl(BrandMoodAnalyzeReqDto request) {
+        if (request.getSourceUrl() == null || request.getSourceUrl().isBlank()) {
+            throw new IllegalArgumentException("브랜드 무드 분석을 위한 sourceUrl을 입력해주세요.");
         }
     }
 
@@ -225,12 +212,6 @@ public class BrandMoodService {
                   "customBrandNote": "string|null"
                 }
                 """;
-    }
-
-    private void validateRequiredSourceUrl(BrandMoodAnalyzeReqDto request) {
-        if (request.getSourceUrl() == null || request.getSourceUrl().isBlank()) {
-            throw new IllegalArgumentException("브랜드 URL을 입력해주세요.");
-        }
     }
 
     private String buildAnalyzeUserPrompt(Brand brand, BrandMoodAnalyzeReqDto request) {

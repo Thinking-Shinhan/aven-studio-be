@@ -10,13 +10,7 @@ import lombok.Data;
 public class ImageGenerationJobCreateReqDto {
 
     @NotNull
-    private Long brandId;
-
-    @NotNull
     private Long productId;
-
-    @NotNull
-    private Long brandMoodId;
 
     @NotBlank
     private String cutType;
