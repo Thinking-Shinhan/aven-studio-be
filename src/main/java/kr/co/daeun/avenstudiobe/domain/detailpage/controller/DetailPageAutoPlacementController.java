@@ -13,12 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/detail-pages/images")
+@RequestMapping("/detail-pages")
 public class DetailPageAutoPlacementController {
 
     private final AutoImagePlacementService autoImagePlacementService;
 
-    @PostMapping("/auto-placement")
+    @PostMapping({"/auto-place-image"})
     public ResponseEntity<AutoImagePlacementRespDto> autoPlace(
             @Valid @RequestBody AutoImagePlacementReqDto request
     ) {
