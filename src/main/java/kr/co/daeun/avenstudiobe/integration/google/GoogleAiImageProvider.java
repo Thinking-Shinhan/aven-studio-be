@@ -2,9 +2,11 @@ package kr.co.daeun.avenstudiobe.integration.google;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -15,18 +17,16 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@RequiredArgsConstructor
 public class GoogleAiImageProvider {
 
     private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
-    @Value("${google.ai.api-key:}")
-    private String apiKey;
-
-    @Value("${google.ai.image-model:gemini-2.5-flash-image}")
-    private String imageModel;
+    private final GoogleAiProperties properties;
+    @Qualifier("googleAiRestClient")
+    private final RestClient restClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient = RestClient.create();
 
     public GeneratedImage generate(String prompt) {
         return generate(prompt, Collections.emptyList());
@@ -36,7 +36,7 @@ public class GoogleAiImageProvider {
         validateApiKey();
 
         Map<String, Object> requestBody = Map.of(
-                "model", imageModel,
+                "model", properties.getImageModel(),
                 "input", buildInput(prompt, referenceImages)
         );
 
@@ -44,7 +44,7 @@ public class GoogleAiImageProvider {
         try {
             response = restClient.post()
                     .uri(INTERACTIONS_URL)
-                    .header("x-goog-api-key", apiKey)
+                    .header("x-goog-api-key", properties.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()
@@ -53,6 +53,12 @@ public class GoogleAiImageProvider {
             throw new IllegalStateException(
                     "Google AI API 요청에 실패했습니다. status=" + e.getStatusCode().value()
                             + ", response=" + abbreviate(e.getResponseBodyAsString()),
+                    e
+            );
+        } catch (ResourceAccessException e) {
+            throw new IllegalStateException(
+                    "Google AI API 응답 대기 중 연결 오류가 발생했습니다. "
+                            + "이미지 생성에 시간이 오래 걸리면 google.ai.timeout-seconds 설정을 늘려주세요.",
                     e
             );
         }
@@ -87,7 +93,7 @@ public class GoogleAiImageProvider {
     }
 
     public String getImageModel() {
-        return imageModel;
+        return properties.getImageModel();
     }
 
     private GeneratedImage parseGeneratedImage(String response) {
@@ -155,7 +161,7 @@ public class GoogleAiImageProvider {
     }
 
     private void validateApiKey() {
-        if (apiKey == null || apiKey.isBlank()) {
+        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new IllegalStateException("GOOGLE_AI_API_KEY 환경변수가 설정되어 있지 않습니다.");
         }
     }

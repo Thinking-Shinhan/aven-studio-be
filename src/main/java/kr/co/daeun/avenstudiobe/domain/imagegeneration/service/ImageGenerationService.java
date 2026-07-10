@@ -1,8 +1,5 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
@@ -29,6 +26,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Base64;
 import java.util.ArrayList;
@@ -388,7 +388,7 @@ public class ImageGenerationService {
                 """.formatted(keys.toString().trim());
     }
 
-    private List<ReferenceAssetInput> resolveReferenceAssets(String referenceJson, Long brandId) {
+    private List<ReferenceAssetInput> resolveReferenceAssets(JsonNode referenceJson, Long brandId) {
         JsonNode root = parseReferenceJson(referenceJson);
         if (root == null || root.isMissingNode() || root.isNull() || root.isEmpty()) {
             return List.of();
@@ -412,14 +412,23 @@ public class ImageGenerationService {
         return references;
     }
 
-    private JsonNode parseReferenceJson(String referenceJson) {
-        if (referenceJson == null || referenceJson.isBlank()) {
+    private JsonNode parseReferenceJson(JsonNode referenceJson) {
+        if (referenceJson == null || referenceJson.isMissingNode() || referenceJson.isNull()) {
+            return objectMapper.createObjectNode();
+        }
+
+        if (!referenceJson.isTextual()) {
+            return referenceJson;
+        }
+
+        String jsonText = referenceJson.asText();
+        if (jsonText == null || jsonText.isBlank()) {
             return objectMapper.createObjectNode();
         }
 
         try {
-            return objectMapper.readTree(referenceJson);
-        } catch (JsonProcessingException e) {
+            return objectMapper.readTree(jsonText);
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("referenceJson 형식이 올바르지 않습니다.", e);
         }
     }
@@ -451,7 +460,7 @@ public class ImageGenerationService {
 
     private void addReference(List<ReferenceAssetInput> references, String key, JsonNode node, Long brandId) {
         Long assetId = extractAssetId(node);
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetRepository.findByIdWithProductAndBrand(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("참조 이미지를 찾을 수 없습니다. assetId=" + assetId));
 
         if (asset.getProduct() != null && !asset.getProduct().getBrand().getId().equals(brandId)) {
@@ -561,7 +570,7 @@ public class ImageGenerationService {
             Long brandId
     ) {
         Long assetId = extractAssetId(node);
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetRepository.findByIdWithProductAndBrand(assetId)
                 .orElseThrow(() -> new IllegalArgumentException("착장 상품 이미지를 찾을 수 없습니다. assetId=" + assetId));
 
         if (asset.getProduct() == null || !asset.getProduct().getBrand().getId().equals(brandId)) {
@@ -663,12 +672,25 @@ public class ImageGenerationService {
         return generationMode.trim().toUpperCase();
     }
 
-    private String normalizeJson(String json) {
-        if (json == null || json.isBlank()) {
+    private String normalizeJson(JsonNode json) {
+        if (json == null || json.isMissingNode() || json.isNull()) {
             return "{}";
         }
 
-        return json;
+        if (json.isTextual()) {
+            String jsonText = json.asText();
+            if (jsonText == null || jsonText.isBlank()) {
+                return "{}";
+            }
+
+            return jsonText;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(json);
+        } catch (JacksonException e) {
+            throw new IllegalArgumentException("JSON 형식이 올바르지 않습니다.", e);
+        }
     }
 
     private int elapsedMs(long startedAt) {
