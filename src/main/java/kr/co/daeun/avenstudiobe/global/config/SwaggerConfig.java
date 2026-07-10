@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import io.swagger.v3.oas.annotations.servers.Server;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -13,7 +14,11 @@ import org.springframework.context.annotation.Configuration;
                 title = "Aven Studio API",
                 version = "v1",
                 description = "Aven Studio 백엔드 API 문서입니다."
-        )
+        ),
+        servers = {
+                @Server(url = "https://api.aven-studio.store", description = "Production"),
+                @Server(url = "http://localhost:8080", description = "Local")
+        }
 )
 @SecurityScheme(
         name = "accessTokenCookie",
