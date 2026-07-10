@@ -54,10 +54,6 @@ public class ImageGenerationOptionController {
             @RequestParam("label") String label,
             @RequestParam(required = false) String description,
             @RequestParam(defaultValue = "0") Integer sortOrder,
-<<<<<<< HEAD
-=======
-            @RequestParam(required = false) String cutType,
->>>>>>> develop
             @RequestParam(required = false) String promptText
     ) {
         ReferenceAssetRespDto referenceAsset = imageGenerationOptionService.uploadReferenceAsset(
@@ -67,10 +63,6 @@ public class ImageGenerationOptionController {
                 label,
                 description,
                 sortOrder,
-<<<<<<< HEAD
-=======
-                cutType,
->>>>>>> develop
                 promptText
         );
 

@@ -46,12 +46,6 @@ public class ReferenceAsset {
     @Column(name = "sort_order", nullable = false)
     private Integer sortOrder;
 
-<<<<<<< HEAD
-=======
-    @Column(name = "cut_type", length = 30)
-    private String cutType;
-
->>>>>>> develop
     @Column(name = "prompt_text", columnDefinition = "TEXT")
     private String promptText;
 
@@ -70,10 +64,6 @@ public class ReferenceAsset {
             String description,
             Boolean active,
             Integer sortOrder,
-<<<<<<< HEAD
-=======
-            String cutType,
->>>>>>> develop
             String promptText
     ) {
         this.referenceType = referenceType;
@@ -85,10 +75,6 @@ public class ReferenceAsset {
         this.description = description;
         this.active = active;
         this.sortOrder = sortOrder;
-<<<<<<< HEAD
-=======
-        this.cutType = cutType;
->>>>>>> develop
         this.promptText = promptText;
     }
 }
