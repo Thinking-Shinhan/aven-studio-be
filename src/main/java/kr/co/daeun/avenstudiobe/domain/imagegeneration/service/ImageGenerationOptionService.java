@@ -68,23 +68,11 @@ public class ImageGenerationOptionService {
         List<ReferenceAsset> templates = referenceAssetRepository
                 .findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc("SHOT_TEMPLATE");
 
-<<<<<<< HEAD
         List<ShotTemplateRespDto> dtos = templates.stream()
                 .map(this::toShotTemplateResponse)
                 .toList();
 
         return new ShotTemplateListRespDto(dtos);
-=======
-        List<ReferenceAsset> templates = referenceAssetRepository
-                .findByReferenceTypeAndCutTypeAndActiveTrueOrderBySortOrderAscIdAsc(
-                        "SHOT_TEMPLATE", normalizedCutType);
-
-        List<ShotTemplateRespDto> dtos = templates.stream()
-                .map(this::toShotTemplateResponse)
-                .toList();
-
-        return new ShotTemplateListRespDto(normalizedCutType, dtos);
->>>>>>> develop
     }
 
     public ReferenceAssetListRespDto getReferenceAssets(String assetType) {
@@ -109,23 +97,14 @@ public class ImageGenerationOptionService {
             String label,
             String description,
             Integer sortOrder,
-<<<<<<< HEAD
-=======
-            String cutType,
->>>>>>> develop
             String promptText
     ) {
         String normalizedAssetType = normalizeRequiredAssetType(assetType);
         String normalizedKey = normalizeReferenceKey(key);
         String normalizedLabel = normalizeLabel(label);
-        String normalizedCutType = normalizeCutTypeOrNull(cutType);
 
         if (referenceAssetRepository.existsByReferenceKey(normalizedKey)) {
             throw new IllegalArgumentException("이미 사용 중인 레퍼런스 에셋 key입니다.");
-        }
-
-        if ("SHOT_TEMPLATE".equals(normalizedAssetType) && normalizedCutType == null) {
-            throw new IllegalArgumentException("SHOT_TEMPLATE 타입은 cutType을 반드시 지정해야 합니다.");
         }
 
         GcsService.UploadedFile uploaded = gcsService.uploadReferenceAsset(file, normalizedAssetType);
@@ -141,10 +120,6 @@ public class ImageGenerationOptionService {
                     .description(description)
                     .active(true)
                     .sortOrder(sortOrder == null ? 0 : sortOrder)
-<<<<<<< HEAD
-=======
-                    .cutType(normalizedCutType)
->>>>>>> develop
                     .promptText(promptText)
                     .build();
 
@@ -155,25 +130,6 @@ public class ImageGenerationOptionService {
             throw e;
         }
     }
-
-
-<<<<<<< HEAD
-=======
-
-    private String normalizeCutType(String cutType) {
-        if (cutType == null || cutType.isBlank()) {
-            return "PRODUCT_CUT";
-        }
-
-        String normalizedCutType = cutType.trim().toUpperCase();
-
-        if (!List.of("MODEL_CUT", "PRODUCT_CUT").contains(normalizedCutType)) {
-            throw new IllegalArgumentException("지원하지 않는 컷 유형입니다.");
-        }
-
-        return normalizedCutType;
-    }
->>>>>>> develop
 
     private String normalizeAssetType(String assetType) {
         if (assetType == null || assetType.isBlank()) {
@@ -213,20 +169,6 @@ public class ImageGenerationOptionService {
         return label.trim();
     }
 
-    private String normalizeCutTypeOrNull(String cutType) {
-        if (cutType == null || cutType.isBlank()) {
-            return null;
-        }
-
-        String normalized = cutType.trim().toUpperCase();
-
-        if (!List.of("MODEL_CUT", "PRODUCT_CUT").contains(normalized)) {
-            throw new IllegalArgumentException("지원하지 않는 컷 유형입니다.");
-        }
-
-        return normalized;
-    }
-
     private OptionRespDto option(String key, String label, String description) {
         return new OptionRespDto(key, label, description);
     }
@@ -236,10 +178,6 @@ public class ImageGenerationOptionService {
                 asset.getId(),
                 asset.getReferenceKey(),
                 asset.getName(),
-<<<<<<< HEAD
-=======
-                asset.getCutType(),
->>>>>>> develop
                 asset.getPromptText(),
                 asset.getDescription(),
                 getReferenceAssetImageUrl(asset)
