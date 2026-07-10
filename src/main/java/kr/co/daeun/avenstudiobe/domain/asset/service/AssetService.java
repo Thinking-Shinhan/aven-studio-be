@@ -235,8 +235,7 @@ public class AssetService {
                 asset.getObjectName(),
                 asset.getOriginalFilename(),
                 asset.getContentType(),
-                asset.getSize(),
-                asset.getDescription()
+                asset.getSize()
         );
     }
 
@@ -261,8 +260,7 @@ public class AssetService {
             String objectName,
             String originalFilename,
             String contentType,
-            long size,
-            String description
+            long size
     ) {}
 
     private List<String> normalizeAndValidateAssetRoles(List<String> assetRoles, Long productId) {

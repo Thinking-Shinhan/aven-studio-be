@@ -7,7 +7,6 @@ public record ProductAssetRespDto(
         String objectName,
         String originalFilename,
         String contentType,
-        long size,
-        String description
+        long size
 ) {
 }

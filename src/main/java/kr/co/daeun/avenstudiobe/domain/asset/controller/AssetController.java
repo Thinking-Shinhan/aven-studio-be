@@ -95,8 +95,7 @@ public class AssetController {
                 asset.objectName(),
                 asset.originalFilename(),
                 asset.contentType(),
-                asset.size(),
-                asset.description()
+                asset.size()
         );
     }
 }
