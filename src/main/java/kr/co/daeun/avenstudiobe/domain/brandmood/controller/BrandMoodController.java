@@ -62,14 +62,13 @@ public class BrandMoodController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/{brandMoodId}")
-    @Operation(summary = "브랜드 무드 단건 조회", description = "저장된 브랜드 무드 분석 결과를 조회합니다.")
+    @GetMapping("/current")
+    @Operation(summary = "현재 브랜드 무드 조회", description = "로그인 사용자 브랜드의 활성 최신 브랜드 무드를 조회합니다.")
     public ResponseEntity<BrandMoodRespDto> get(
-            @PathVariable Long brandMoodId,
             Authentication authentication
     ) {
         User user = usersService.findByLoginId(authentication.getName());
-        BrandMoodRespDto response = brandMoodService.get(brandMoodId, user);
+        BrandMoodRespDto response = brandMoodService.getCurrent(user);
         return ResponseEntity.ok(response);
     }
 }

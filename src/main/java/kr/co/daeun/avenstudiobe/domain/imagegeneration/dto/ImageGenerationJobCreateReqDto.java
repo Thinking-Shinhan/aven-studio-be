@@ -12,9 +12,6 @@ public class ImageGenerationJobCreateReqDto {
     @NotNull
     private Long productId;
 
-    @NotNull
-    private Long brandMoodId;
-
     @NotBlank
     private String cutType;
 

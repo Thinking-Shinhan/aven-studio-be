@@ -115,15 +115,11 @@ public class BrandMoodService {
     }
 
     @Transactional(readOnly = true)
-    public BrandMoodRespDto get(Long brandMoodId, User user) {
+    public BrandMoodRespDto getCurrent(User user) {
         Long brandId = user.getBrand().getId();
 
-        BrandMood brandMood = brandMoodRepository.findById(brandMoodId)
-                .orElseThrow(() -> new IllegalArgumentException("브랜드 무드를 찾을 수 없습니다."));
-
-        if (!brandMood.getBrand().getId().equals(brandId)) {
-            throw new IllegalArgumentException("브랜드에 속한 무드가 아닙니다.");
-        }
+        BrandMood brandMood = brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(brandId)
+                .orElseThrow(() -> new IllegalArgumentException("활성화된 브랜드 무드가 없습니다."));
 
         return toResponse(brandMood);
     }

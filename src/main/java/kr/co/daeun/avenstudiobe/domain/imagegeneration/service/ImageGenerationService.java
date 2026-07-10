@@ -59,11 +59,11 @@ public class ImageGenerationService {
         Brand brand = user.getBrand();
         Product product = productRepository.findByIdAndBrand_Id(request.getProductId(), brand.getId())
                 .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
-        BrandMood brandMood = findBrandMood(request.getBrandMoodId(), brand.getId());
+        BrandMood brandMood = findActiveBrandMood(brand.getId());
         List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson(), brand.getId());
         String compiledPrompt = compilePrompt(brandMood, request.getPrompt(), referenceAssets);
 
-        ImageGenerationJob job = savePendingJob(request, user, brand, product, compiledPrompt);
+        ImageGenerationJob job = savePendingJob(request, user, brand, product, brandMood, compiledPrompt);
         long startedAt = System.currentTimeMillis();
 
         try {
@@ -119,12 +119,13 @@ public class ImageGenerationService {
             User user,
             Brand brand,
             Product product,
+            BrandMood brandMood,
             String compiledPrompt
     ) {
         ImageGenerationJob job = ImageGenerationJob.create(
                 brand,
                 product,
-                request.getBrandMoodId(),
+                brandMood.getId(),
                 user,
                 request.getCutType(),
                 normalizeGenerationMode(request.getGenerationMode()),
@@ -242,19 +243,9 @@ public class ImageGenerationService {
         }
     }
 
-    private BrandMood findBrandMood(Long brandMoodId, Long brandId) {
-        BrandMood brandMood = brandMoodRepository.findById(brandMoodId)
-                .orElseThrow(() -> new IllegalArgumentException("브랜드 무드를 찾을 수 없습니다."));
-
-        if (!brandMood.getBrand().getId().equals(brandId)) {
-            throw new IllegalArgumentException("브랜드에 속한 무드가 아닙니다.");
-        }
-
-        if (!Boolean.TRUE.equals(brandMood.getActive())) {
-            throw new IllegalArgumentException("활성화된 브랜드 무드가 아닙니다.");
-        }
-
-        return brandMood;
+    private BrandMood findActiveBrandMood(Long brandId) {
+        return brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(brandId)
+                .orElseThrow(() -> new IllegalArgumentException("활성화된 브랜드 무드가 없습니다. 브랜드 무드 분석 및 저장을 먼저 진행해주세요."));
     }
 
     private String compilePrompt(BrandMood brandMood, String userPrompt, List<ReferenceAssetInput> referenceAssets) {
