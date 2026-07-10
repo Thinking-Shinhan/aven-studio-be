@@ -12,6 +12,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.mapper.PlacementSlotMapper;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.global.exception.ProductNotFoundException;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class AutoPlacementContextLoader {
     private final ProductRepository productRepository;
     private final AssetRepository assetRepository;
     private final PlacementSlotMapper placementSlotMapper;
+    private final GcsService gcsService;
 
     @Transactional(readOnly = true)
     public AutoPlacementContext load(AutoImagePlacementReqDto request) {
@@ -60,8 +62,16 @@ public class AutoPlacementContextLoader {
                 asset.getId(),
                 resolveAssetRole(asset),
                 asset.getDescription(),
-                asset.getFileUrl()
+                resolveAssetUrl(asset)
         );
+    }
+
+    private String resolveAssetUrl(Asset asset) {
+        if (asset.getObjectName() == null || asset.getObjectName().isBlank()) {
+            return asset.getFileUrl();
+        }
+
+        return gcsService.generateSignedUrl(asset.getObjectName());
     }
 
     private String resolveAssetRole(Asset asset) {
