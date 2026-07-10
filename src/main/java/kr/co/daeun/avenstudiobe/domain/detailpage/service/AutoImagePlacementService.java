@@ -40,6 +40,8 @@ public class AutoImagePlacementService {
                     resultValidator.validateAndConvert(aiResponse, context);
 
             if (!placements.isEmpty()) {
+                log.info("Auto image placement AI succeeded. productId={}, placementCount={}",
+                        context.productId(), placements.size());
                 return new AutoImagePlacementRespDto(context.productId(), placements);
             }
 
