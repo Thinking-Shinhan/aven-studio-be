@@ -1,15 +1,49 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
+import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
+import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
+import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
+import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobCreateReqDto;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ImageGenerationJobRespDto;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationJob;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationJobRepository;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationResultRepository;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
+import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import kr.co.daeun.avenstudiobe.integration.google.GoogleAiImageProvider;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ImageGenerationServiceTest {
 
@@ -53,6 +87,164 @@ class ImageGenerationServiceTest {
         assertTrue(instruction.contains("Only one model may appear"));
     }
 
+    @Test
+    void multiShotIdsDetermineRequestedCount() throws Throwable {
+        JsonNode references = objectMapper.readTree("""
+                {"shotReferenceIds":[11,12,13,14]}
+                """);
+
+        List<Long> shotReferenceIds = invokeShotReferenceIds(references, "PRODUCT_CUT");
+        int requestedCount = invokeRequestedCount(null, shotReferenceIds);
+
+        assertEquals(List.of(11L, 12L, 13L, 14L), shotReferenceIds);
+        assertEquals(4, requestedCount);
+    }
+
+    @Test
+    void requestedCountMustMatchMultiShotSize() throws Throwable {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invokeRequestedCount(4, List.of(11L, 12L))
+        );
+
+        assertEquals("requestedCount는 shotReferenceIds 개수와 같아야 합니다.", exception.getMessage());
+    }
+
+    @Test
+    void singleAndMultiShotFieldsCannotBeUsedTogether() throws Exception {
+        JsonNode references = objectMapper.readTree("""
+                {"shotReferenceId":11,"shotReferenceIds":[11,12]}
+                """);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invokeShotReferenceIds(references, "PRODUCT_CUT")
+        );
+
+        assertEquals("shotReferenceId와 shotReferenceIds는 동시에 사용할 수 없습니다.", exception.getMessage());
+    }
+
+    @Test
+    void multiShotIdsAreRejectedForModelCut() throws Exception {
+        JsonNode references = objectMapper.readTree("""
+                {"shotReferenceIds":[11,12]}
+                """);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invokeShotReferenceIds(references, "MODEL_CUT")
+        );
+
+        assertEquals("shotReferenceIds는 PRODUCT_CUT에서만 사용할 수 있습니다.", exception.getMessage());
+    }
+
+    @Test
+    void multiShotCreatesOneIndependentProviderCallPerShot() throws Exception {
+        ImageGenerationJobRepository jobRepository = mock(ImageGenerationJobRepository.class);
+        ImageGenerationResultRepository resultRepository = mock(ImageGenerationResultRepository.class);
+        ProductRepository productRepository = mock(ProductRepository.class);
+        BrandMoodRepository brandMoodRepository = mock(BrandMoodRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
+        UsersRepository usersRepository = mock(UsersRepository.class);
+        AssetService assetService = mock(AssetService.class);
+        GcsService gcsService = mock(GcsService.class);
+        GoogleAiImageProvider imageProvider = mock(GoogleAiImageProvider.class);
+
+        ImageGenerationService multiShotService = new ImageGenerationService(
+                jobRepository,
+                resultRepository,
+                productRepository,
+                brandMoodRepository,
+                assetRepository,
+                referenceAssetRepository,
+                usersRepository,
+                assetService,
+                gcsService,
+                imageProvider
+        );
+        setField(multiShotService, "gcsSaveEnabled", false);
+
+        Brand brand = mock(Brand.class);
+        User user = mock(User.class);
+        Product product = mock(Product.class);
+        BrandMood brandMood = mock(BrandMood.class);
+        when(brand.getId()).thenReturn(1L);
+        when(user.getBrand()).thenReturn(brand);
+        when(usersRepository.findByLoginId("tester")).thenReturn(Optional.of(user));
+        when(productRepository.findByIdAndBrand_Id(1L, 1L)).thenReturn(Optional.of(product));
+        when(brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(1L))
+                .thenReturn(Optional.of(brandMood));
+        when(brandMood.getId()).thenReturn(1L);
+        when(brandMood.getBrandInstruction()).thenReturn("Keep the brand mood consistent.");
+        when(imageProvider.getImageModel()).thenReturn("gemini-test-image");
+
+        when(referenceAssetRepository.findById(anyLong())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            ReferenceAsset referenceAsset = mock(ReferenceAsset.class);
+            when(referenceAsset.getId()).thenReturn(id);
+            when(referenceAsset.getActive()).thenReturn(true);
+            when(referenceAsset.getReferenceKey()).thenReturn("SHOT_" + id);
+            when(referenceAsset.getObjectName()).thenReturn("reference/" + id + ".png");
+            when(referenceAsset.getContentType()).thenReturn("image/png");
+            return Optional.of(referenceAsset);
+        });
+        when(gcsService.download(anyString())).thenAnswer(invocation ->
+                invocation.<String>getArgument(0).getBytes()
+        );
+        when(imageProvider.generate(anyString(), any())).thenReturn(
+                new GoogleAiImageProvider.GeneratedImage(new byte[]{1, 2, 3}, "image/png")
+        );
+
+        AtomicReference<ImageGenerationJob> savedJob = new AtomicReference<>();
+        when(jobRepository.save(any(ImageGenerationJob.class))).thenAnswer(invocation -> {
+            ImageGenerationJob job = invocation.getArgument(0);
+            if (savedJob.get() == null) {
+                setField(job, "id", 100L);
+                savedJob.set(job);
+            }
+            return job;
+        });
+        when(jobRepository.findById(100L)).thenAnswer(invocation -> Optional.of(savedJob.get()));
+        when(resultRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ImageGenerationJobCreateReqDto request = new ImageGenerationJobCreateReqDto();
+        request.setProductId(1L);
+        request.setCutType("PRODUCT_CUT");
+        request.setPrompt("Generate each selected product shot.");
+        request.setReferenceJson(objectMapper.readTree("""
+                {"shotReferenceIds":[11,12,13,14]}
+                """));
+
+        ImageGenerationJobRespDto response = multiShotService.createJob(request, "tester");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GoogleAiImageProvider.ReferenceImage>> referenceCaptor =
+                ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(imageProvider, times(4)).generate(promptCaptor.capture(), referenceCaptor.capture());
+
+        Set<String> prompts = Set.copyOf(promptCaptor.getAllValues());
+        Set<String> referencePayloads = referenceCaptor.getAllValues().stream()
+                .peek(references -> assertEquals(1, references.size()))
+                .map(references -> references.get(0))
+                .peek(reference -> assertEquals("shotReferenceImage", reference.key()))
+                .map(reference -> new String(reference.bytes()))
+                .collect(Collectors.toSet());
+
+        assertEquals(4, prompts.size());
+        assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 11 (SHOT_11)")));
+        assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 14 (SHOT_14)")));
+        assertEquals(Set.of(
+                "reference/11.png",
+                "reference/12.png",
+                "reference/13.png",
+                "reference/14.png"
+        ), referencePayloads);
+        assertEquals(4, response.getRequestedCount());
+        assertEquals(4, response.getOutputCount());
+    }
+
     private void invokeMetadataBuilder(String methodName, JsonNode emptyJson) throws Throwable {
         Method method = ImageGenerationService.class.getDeclaredMethod(methodName, JsonNode.class, JsonNode.class);
         method.setAccessible(true);
@@ -68,5 +260,42 @@ class ImageGenerationServiceTest {
         Method method = ImageGenerationService.class.getDeclaredMethod("buildSystemInstruction", String.class);
         method.setAccessible(true);
         return (String) method.invoke(service, cutType);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Long> invokeShotReferenceIds(JsonNode references, String cutType) throws Throwable {
+        Method method = ImageGenerationService.class.getDeclaredMethod(
+                "extractShotReferenceIds",
+                JsonNode.class,
+                String.class
+        );
+        method.setAccessible(true);
+
+        try {
+            return (List<Long>) method.invoke(service, references, cutType);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+    }
+
+    private int invokeRequestedCount(Integer requestedCount, List<Long> shotReferenceIds) throws Throwable {
+        Method method = ImageGenerationService.class.getDeclaredMethod(
+                "resolveRequestedCount",
+                Integer.class,
+                List.class
+        );
+        method.setAccessible(true);
+
+        try {
+            return (int) method.invoke(service, requestedCount, shotReferenceIds);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+    }
+
+    private void setField(Object target, String fieldName, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 }

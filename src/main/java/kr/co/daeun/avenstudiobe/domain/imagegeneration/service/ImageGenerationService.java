@@ -32,8 +32,10 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.Base64;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -85,40 +87,36 @@ public class ImageGenerationService {
     private boolean gcsSaveEnabled;
 
     public ImageGenerationJobRespDto createJob(ImageGenerationJobCreateReqDto request, String loginId) {
-        validateRequestedCount(request.getRequestedCount());
-
         User user = usersRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
         Brand brand = user.getBrand();
         Product product = productRepository.findByIdAndBrand_Id(request.getProductId(), brand.getId())
                 .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
         BrandMood brandMood = findActiveBrandMood(brand.getId());
-        List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson(), brand.getId());
-        String compiledPrompt = compilePrompt(
-                brandMood,
-                request.getCutType(),
-                request.getPrompt(),
-                referenceAssets
-        );
+        GenerationPlan generationPlan = buildGenerationPlan(request, brandMood, brand.getId());
 
-        ImageGenerationJob job = savePendingJob(request, user, brand, product, brandMood, compiledPrompt);
+        ImageGenerationJob job = savePendingJob(
+                request,
+                user,
+                brand,
+                product,
+                brandMood,
+                generationPlan.storedPrompt(),
+                generationPlan.requestedCount(),
+                generationPlan.multiShot()
+        );
         long startedAt = System.currentTimeMillis();
 
         try {
             markProcessing(job.getId());
 
-            List<GoogleAiImageProvider.GeneratedImage> generatedImages = generateImages(
-                    compiledPrompt,
-                    request.getRequestedCount(),
-                    toProviderReferenceImages(referenceAssets)
-            );
+            List<GeneratedOutput> generatedOutputs = generateImages(generationPlan.tasks());
 
             if (gcsSaveEnabled) {
                 List<ImageGenerationResult> results = saveGeneratedResults(
                         job.getId(),
                         product.getId(),
-                        generatedImages,
-                        compiledPrompt,
+                        generatedOutputs,
                         startedAt
                 );
 
@@ -127,11 +125,11 @@ public class ImageGenerationService {
 
             List<ImageGenerationResult> results = saveGeneratedResultsWithoutGcs(
                     job.getId(),
-                    generatedImages.size(),
+                    generatedOutputs.size(),
                     startedAt
             );
 
-            return toResponseWithInlineImages(job.getId(), results, generatedImages);
+            return toResponseWithInlineImages(job.getId(), results, generatedOutputs);
         } catch (RuntimeException e) {
             markFailed(job.getId(), e.getMessage(), elapsedMs(startedAt));
             throw e;
@@ -158,7 +156,9 @@ public class ImageGenerationService {
             Brand brand,
             Product product,
             BrandMood brandMood,
-            String compiledPrompt
+            String compiledPrompt,
+            int requestedCount,
+            boolean multiShot
     ) {
         ImageGenerationJob job = ImageGenerationJob.create(
                 brand,
@@ -166,13 +166,13 @@ public class ImageGenerationService {
                 brandMood.getId(),
                 user,
                 request.getCutType(),
-                normalizeGenerationMode(request.getGenerationMode()),
+                multiShot ? "PARALLEL" : normalizeGenerationMode(request.getGenerationMode()),
                 compiledPrompt,
                 request.getNegativePrompt(),
                 normalizeJson(request.getUserOptionsJson()),
                 normalizeJson(request.getReferenceJson()),
                 googleAiImageProvider.getImageModel(),
-                request.getRequestedCount()
+                requestedCount
         );
 
         return jobRepository.save(job);
@@ -190,26 +190,25 @@ public class ImageGenerationService {
     public List<ImageGenerationResult> saveGeneratedResults(
             Long jobId,
             Long productId,
-            List<GoogleAiImageProvider.GeneratedImage> generatedImages,
-            String prompt,
+            List<GeneratedOutput> generatedOutputs,
             long startedAt
     ) {
         ImageGenerationJob job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
-        GeneratedAssetMetadata metadata = buildGeneratedAssetMetadata(job);
-
         List<ImageGenerationResult> results = new ArrayList<>();
 
-        for (int i = 0; i < generatedImages.size(); i++) {
-            GoogleAiImageProvider.GeneratedImage generatedImage = generatedImages.get(i);
+        for (int i = 0; i < generatedOutputs.size(); i++) {
+            GeneratedOutput generatedOutput = generatedOutputs.get(i);
+            GoogleAiImageProvider.GeneratedImage generatedImage = generatedOutput.image();
+            GeneratedAssetMetadata metadata = buildGeneratedAssetMetadata(job, generatedOutput.shotReferenceId());
             Asset asset = assetService.saveGeneratedImage(
                     generatedImage.bytes(),
                     generatedImage.contentType(),
                     product,
                     job.getId(),
-                    prompt,
+                    generatedOutput.prompt(),
                     metadata.assetRole(),
                     metadata.description()
             );
@@ -254,24 +253,25 @@ public class ImageGenerationService {
         jobRepository.save(job);
     }
 
-    private List<GoogleAiImageProvider.GeneratedImage> generateImages(
-            String prompt,
-            int requestedCount,
-            List<GoogleAiImageProvider.ReferenceImage> referenceImages
-    ) {
-        List<CompletableFuture<GoogleAiImageProvider.GeneratedImage>> futures = new ArrayList<>();
-
-        for (int i = 0; i < requestedCount; i++) {
-            futures.add(CompletableFuture.supplyAsync(() -> googleAiImageProvider.generate(prompt, referenceImages)));
-        }
+    private List<GeneratedOutput> generateImages(List<GenerationTask> tasks) {
+        List<CompletableFuture<GeneratedOutput>> futures = tasks.stream()
+                .map(task -> CompletableFuture.supplyAsync(() -> new GeneratedOutput(
+                        googleAiImageProvider.generate(
+                                task.prompt(),
+                                toProviderReferenceImages(task.referenceAssets())
+                        ),
+                        task.prompt(),
+                        task.shotReferenceId()
+                )))
+                .toList();
 
         return futures.stream()
-                .map(this::joinGeneratedImage)
+                .map(this::joinGeneratedOutput)
                 .toList();
     }
 
-    private GoogleAiImageProvider.GeneratedImage joinGeneratedImage(
-            CompletableFuture<GoogleAiImageProvider.GeneratedImage> future
+    private GeneratedOutput joinGeneratedOutput(
+            CompletableFuture<GeneratedOutput> future
     ) {
         try {
             return future.join();
@@ -287,6 +287,119 @@ public class ImageGenerationService {
     private BrandMood findActiveBrandMood(Long brandId) {
         return brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(brandId)
                 .orElseThrow(() -> new IllegalArgumentException("활성화된 브랜드 무드가 없습니다. 브랜드 무드 분석 및 저장을 먼저 진행해주세요."));
+    }
+
+    private GenerationPlan buildGenerationPlan(
+            ImageGenerationJobCreateReqDto request,
+            BrandMood brandMood,
+            Long brandId
+    ) {
+        JsonNode referenceRoot = parseReferenceJson(request.getReferenceJson());
+        List<Long> shotReferenceIds = extractShotReferenceIds(referenceRoot, request.getCutType());
+        int requestedCount = resolveRequestedCount(request.getRequestedCount(), shotReferenceIds);
+        List<ReferenceAssetInput> commonReferences = resolveReferenceAssets(referenceRoot, brandId);
+
+        if (shotReferenceIds.isEmpty()) {
+            String prompt = compilePrompt(
+                    brandMood,
+                    request.getCutType(),
+                    request.getPrompt(),
+                    commonReferences
+            );
+            List<GenerationTask> tasks = new ArrayList<>();
+            for (int i = 0; i < requestedCount; i++) {
+                tasks.add(new GenerationTask(prompt, commonReferences, null));
+            }
+            return new GenerationPlan(tasks, prompt, requestedCount, false);
+        }
+
+        List<GenerationTask> tasks = new ArrayList<>();
+        for (Long shotReferenceId : shotReferenceIds) {
+            List<ReferenceAssetInput> taskReferences = new ArrayList<>(commonReferences);
+            addServiceReference(taskReferences, "shotReferenceImage", shotReferenceId);
+            validateReferenceCount(taskReferences);
+            String prompt = compilePrompt(
+                    brandMood,
+                    request.getCutType(),
+                    request.getPrompt(),
+                    taskReferences
+            );
+            tasks.add(new GenerationTask(prompt, List.copyOf(taskReferences), shotReferenceId));
+        }
+
+        return new GenerationPlan(tasks, buildStoredPrompt(tasks), requestedCount, true);
+    }
+
+    private List<Long> extractShotReferenceIds(JsonNode referenceRoot, String cutType) {
+        if (referenceRoot == null || referenceRoot.isMissingNode() || referenceRoot.isNull()) {
+            return List.of();
+        }
+
+        JsonNode multipleNode = referenceRoot.path("shotReferenceIds");
+        if (multipleNode.isMissingNode() || multipleNode.isNull()) {
+            return List.of();
+        }
+
+        if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            throw new IllegalArgumentException("shotReferenceIds는 PRODUCT_CUT에서만 사용할 수 있습니다.");
+        }
+        if (!referenceRoot.path("shotReferenceId").isMissingNode()
+                && !referenceRoot.path("shotReferenceId").isNull()) {
+            throw new IllegalArgumentException("shotReferenceId와 shotReferenceIds는 동시에 사용할 수 없습니다.");
+        }
+        if (!multipleNode.isArray() || multipleNode.isEmpty()) {
+            throw new IllegalArgumentException("shotReferenceIds는 1개 이상 4개 이하의 배열이어야 합니다.");
+        }
+        if (multipleNode.size() > 4) {
+            throw new IllegalArgumentException("shotReferenceIds는 최대 4개까지 선택할 수 있습니다.");
+        }
+
+        List<Long> shotReferenceIds = new ArrayList<>();
+        Set<Long> uniqueIds = new HashSet<>();
+        for (JsonNode item : multipleNode) {
+            if (!item.isNumber()) {
+                throw new IllegalArgumentException("shotReferenceIds에는 숫자 ID만 입력할 수 있습니다.");
+            }
+
+            long shotReferenceId = item.asLong();
+            if (!uniqueIds.add(shotReferenceId)) {
+                throw new IllegalArgumentException("shotReferenceIds에 중복된 ID를 입력할 수 없습니다.");
+            }
+            shotReferenceIds.add(shotReferenceId);
+        }
+
+        return List.copyOf(shotReferenceIds);
+    }
+
+    private int resolveRequestedCount(Integer requestedCount, List<Long> shotReferenceIds) {
+        if (shotReferenceIds != null && !shotReferenceIds.isEmpty()) {
+            int shotCount = shotReferenceIds.size();
+            if (requestedCount != null && requestedCount != shotCount) {
+                throw new IllegalArgumentException("requestedCount는 shotReferenceIds 개수와 같아야 합니다.");
+            }
+            return shotCount;
+        }
+
+        int effectiveRequestedCount = requestedCount == null ? 2 : requestedCount;
+        validateRequestedCount(effectiveRequestedCount);
+        return effectiveRequestedCount;
+    }
+
+    private String buildStoredPrompt(List<GenerationTask> tasks) {
+        StringBuilder storedPrompt = new StringBuilder();
+        for (int i = 0; i < tasks.size(); i++) {
+            GenerationTask task = tasks.get(i);
+            if (i > 0) {
+                storedPrompt.append("\n\n");
+            }
+            storedPrompt.append("[OUTPUT ")
+                    .append(i + 1)
+                    .append(" / SHOT_REFERENCE_ID ")
+                    .append(task.shotReferenceId())
+                    .append("]\n")
+                    .append(task.prompt());
+        }
+        return storedPrompt.toString();
     }
 
     private String compilePrompt(
@@ -520,9 +633,7 @@ public class ImageGenerationService {
         addServiceReference(references, "backgroundImage", root.path("backgroundReferenceId"));
         addServiceReference(references, "shotReferenceImage", root.path("shotReferenceId"));
 
-        if (references.size() > 14) {
-            throw new IllegalArgumentException("참조 이미지는 최대 14장까지만 첨부할 수 있습니다.");
-        }
+        validateReferenceCount(references);
 
         return references;
     }
@@ -595,7 +706,10 @@ public class ImageGenerationService {
             return;
         }
 
-        Long referenceAssetId = extractAssetId(node);
+        addServiceReference(references, key, extractAssetId(node));
+    }
+
+    private void addServiceReference(List<ReferenceAssetInput> references, String key, Long referenceAssetId) {
         ReferenceAsset referenceAsset = referenceAssetRepository.findById(referenceAssetId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "서비스 레퍼런스 이미지를 찾을 수 없습니다. referenceAssetId=" + referenceAssetId
@@ -611,6 +725,12 @@ public class ImageGenerationService {
                 readReferenceAssetBytes(referenceAsset),
                 referenceAsset.getContentType()
         ));
+    }
+
+    private void validateReferenceCount(List<ReferenceAssetInput> references) {
+        if (references.size() > 14) {
+            throw new IllegalArgumentException("참조 이미지는 생성 요청당 최대 14장까지만 첨부할 수 있습니다.");
+        }
     }
 
     private byte[] readReferenceAssetBytes(ReferenceAsset referenceAsset) {
@@ -745,14 +865,14 @@ public class ImageGenerationService {
     private ImageGenerationJobRespDto toResponseWithInlineImages(
             Long jobId,
             List<ImageGenerationResult> results,
-            List<GoogleAiImageProvider.GeneratedImage> generatedImages
+            List<GeneratedOutput> generatedOutputs
     ) {
         ImageGenerationJob job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
 
         List<ImageGenerationResultRespDto> resultDtos = new ArrayList<>();
         for (int i = 0; i < results.size(); i++) {
-            GoogleAiImageProvider.GeneratedImage generatedImage = generatedImages.get(i);
+            GoogleAiImageProvider.GeneratedImage generatedImage = generatedOutputs.get(i).image();
             String imageBase64 = "data:" + generatedImage.contentType() + ";base64,"
                     + Base64.getEncoder().encodeToString(generatedImage.bytes());
             resultDtos.add(ImageGenerationResultRespDto.from(results.get(i), null, imageBase64));
@@ -787,7 +907,7 @@ public class ImageGenerationService {
         return generationMode.trim().toUpperCase();
     }
 
-    private GeneratedAssetMetadata buildGeneratedAssetMetadata(ImageGenerationJob job) {
+    private GeneratedAssetMetadata buildGeneratedAssetMetadata(ImageGenerationJob job, Long shotReferenceId) {
         JsonNode userOptions = readStoredJson(job.getUserOptionsJson());
         JsonNode references = readStoredJson(job.getReferenceJson());
         String normalizedCutType = normalizeValue(job.getCutType());
@@ -796,7 +916,7 @@ public class ImageGenerationService {
             return buildModelCutMetadata(userOptions, references);
         }
 
-        return buildProductCutMetadata(userOptions, references);
+        return buildProductCutMetadata(userOptions, references, shotReferenceId);
     }
 
     private GeneratedAssetMetadata buildModelCutMetadata(JsonNode userOptions, JsonNode references) {
@@ -823,9 +943,23 @@ public class ImageGenerationService {
     }
 
     private GeneratedAssetMetadata buildProductCutMetadata(JsonNode userOptions, JsonNode references) {
+        return buildProductCutMetadata(userOptions, references, null);
+    }
+
+    private GeneratedAssetMetadata buildProductCutMetadata(
+            JsonNode userOptions,
+            JsonNode references,
+            Long shotReferenceId
+    ) {
         String productView = optionValue(userOptions, "productView");
-        String shotReferenceLabel = referenceAssetLabel(references, "shotReferenceId");
-        String shotReferenceKey = referenceAssetKey(references, "shotReferenceId");
+        java.util.Optional<ReferenceAsset> shotReference = shotReferenceId == null
+                ? findReferenceAsset(references, "shotReferenceId")
+                : referenceAssetRepository.findById(shotReferenceId);
+        String shotReferenceLabel = shotReference.map(ReferenceAsset::getName).orElse(null);
+        String shotReferenceKey = shotReference
+                .map(ReferenceAsset::getReferenceKey)
+                .map(this::normalizeValue)
+                .orElse(null);
         String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
         String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
         String normalizedProductView = normalizeValue(productView);
@@ -952,6 +1086,28 @@ public class ImageGenerationService {
             String sourceLabel,
             byte[] bytes,
             String contentType
+    ) {
+    }
+
+    private record GenerationTask(
+            String prompt,
+            List<ReferenceAssetInput> referenceAssets,
+            Long shotReferenceId
+    ) {
+    }
+
+    private record GenerationPlan(
+            List<GenerationTask> tasks,
+            String storedPrompt,
+            int requestedCount,
+            boolean multiShot
+    ) {
+    }
+
+    private record GeneratedOutput(
+            GoogleAiImageProvider.GeneratedImage image,
+            String prompt,
+            Long shotReferenceId
     ) {
     }
 
