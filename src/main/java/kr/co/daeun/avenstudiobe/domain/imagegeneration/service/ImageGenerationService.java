@@ -94,7 +94,12 @@ public class ImageGenerationService {
                 .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
         BrandMood brandMood = findActiveBrandMood(brand.getId());
         List<ReferenceAssetInput> referenceAssets = resolveReferenceAssets(request.getReferenceJson(), brand.getId());
-        String compiledPrompt = compilePrompt(brandMood, request.getPrompt(), referenceAssets);
+        String compiledPrompt = compilePrompt(
+                brandMood,
+                request.getCutType(),
+                request.getPrompt(),
+                referenceAssets
+        );
 
         ImageGenerationJob job = savePendingJob(request, user, brand, product, brandMood, compiledPrompt);
         long startedAt = System.currentTimeMillis();
@@ -284,7 +289,12 @@ public class ImageGenerationService {
                 .orElseThrow(() -> new IllegalArgumentException("활성화된 브랜드 무드가 없습니다. 브랜드 무드 분석 및 저장을 먼저 진행해주세요."));
     }
 
-    private String compilePrompt(BrandMood brandMood, String userPrompt, List<ReferenceAssetInput> referenceAssets) {
+    private String compilePrompt(
+            BrandMood brandMood,
+            String cutType,
+            String userPrompt,
+            List<ReferenceAssetInput> referenceAssets
+    ) {
         String brandInstruction = brandMood.getBrandInstruction();
         if (brandInstruction == null || brandInstruction.isBlank()) {
             throw new IllegalArgumentException("브랜드 무드 지시문이 비어 있습니다.");
@@ -302,14 +312,48 @@ public class ImageGenerationService {
                 [IMAGE GENERATION REQUEST]
                 %s
                 """.formatted(
-                buildSystemInstruction(),
+                buildSystemInstruction(cutType),
                 brandInstruction.trim(),
-                buildReferenceInstruction(referenceAssets),
+                buildReferenceInstruction(cutType, referenceAssets),
                 userPrompt.trim()
         );
     }
 
-    private String buildSystemInstruction() {
+    private String buildSystemInstruction(String cutType) {
+        if ("PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            return """
+                    You are a fashion ecommerce product image generation director.
+                    Generate one premium product-only ecommerce image by combining the references according to their explicit input keys.
+
+                    The key names are critical:
+
+                    productImages = GARMENT_REFERENCE
+                    shotReferenceImage = SHOT_COMPOSITION_REFERENCE
+                    backgroundImage = BACKGROUND_REFERENCE
+
+                    Never swap the role of each reference image.
+
+                    GARMENT_REFERENCE is the only product identity and product accuracy reference.
+                    SHOT_COMPOSITION_REFERENCE is only the composition, crop, placement, view, lighting, and presentation reference.
+                    BACKGROUND_REFERENCE is only the spatial mood and atmosphere reference.
+
+                    Never use the product shown inside SHOT_COMPOSITION_REFERENCE as the final product.
+                    Never copy its design, category, color, logo, text, pattern, material, or decoration.
+                    The final product must be the exact product from GARMENT_REFERENCE.
+
+                    Do not generate a person, visible body, face, skin, or hand.
+                    Do not create a collage, split screen, comparison image, multiple panels, text, labels, watermarks, or graphic overlays.
+                    Do not place the reference images directly inside the final result.
+
+                    Priority order:
+                    1. GARMENT_REFERENCE product accuracy
+                    2. SHOT_COMPOSITION_REFERENCE composition and presentation
+                    3. BACKGROUND_REFERENCE spatial mood and atmosphere
+                    4. Brand mood
+                    5. User selected options
+                    """;
+        }
+
         return """
                 You are a fashion ecommerce image generation director.
                 Combine the reference images provided or selected by the user to generate one premium fashion model image.
@@ -349,7 +393,7 @@ public class ImageGenerationService {
                 """;
     }
 
-    private String buildReferenceInstruction(List<ReferenceAssetInput> referenceAssets) {
+    private String buildReferenceInstruction(String cutType, List<ReferenceAssetInput> referenceAssets) {
         if (referenceAssets == null || referenceAssets.isEmpty()) {
             return "[REFERENCE IMAGE ROLE RULES]\nNo reference images are attached.";
         }
@@ -361,6 +405,10 @@ public class ImageGenerationService {
                     .append(" = ")
                     .append(referenceAsset.sourceLabel())
                     .append("\n");
+        }
+
+        if ("PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            return buildProductCutReferenceInstruction(keys.toString().trim());
         }
 
         return """
@@ -417,6 +465,42 @@ public class ImageGenerationService {
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
                 """.formatted(keys.toString().trim());
+    }
+
+    private String buildProductCutReferenceInstruction(String attachedReferenceKeys) {
+        return """
+                [REFERENCE IMAGE ROLE RULES]
+                The attached reference images are provided with explicit input keys.
+                Interpret each reference image only according to its input key.
+                Never swap the role of each reference image.
+
+                productImages = GARMENT_REFERENCE.
+                productImages are the final product identity and product accuracy references.
+                Preserve the actual product color, shape, silhouette, proportion, material, logo position, texture, seams, and construction details.
+                Do not redesign the product or change its category.
+                Do not add pockets, zippers, buttons, labels, graphics, patterns, decorations, or logos that are not visible in productImages.
+
+                shotReferenceImage = SHOT_COMPOSITION_REFERENCE.
+                Use shotReferenceImage only for the requested product view, camera composition, crop level, product placement, lighting direction, background presentation, and detail emphasis.
+                The product visible inside shotReferenceImage is not the target product.
+                Never copy or preserve its product design, category, color, logo, text, pattern, material, or decoration.
+                Replace it completely with the exact product from productImages while retaining only the shot presentation.
+
+                backgroundImage = BACKGROUND_REFERENCE.
+                Use backgroundImage only for background color, lighting feeling, spatial depth, material mood, and atmosphere.
+                Do not copy products, people, text, logos, signs, or unnecessary objects from backgroundImage.
+
+                [OUTPUT CONDITIONS]
+                The final result must be one complete premium ecommerce product image.
+                The product from productImages must be the only central product identity.
+                Do not generate a person, visible body, face, skin, or hand.
+                Do not create a collage, split screen, comparison image, multiple panels, or multiple-result layout.
+                Do not place the reference images directly inside the final result.
+                Do not add text, labels, watermarks, or graphic overlays.
+
+                [ATTACHED REFERENCE IMAGE KEYS]
+                %s
+                """.formatted(attachedReferenceKeys);
     }
 
     private List<ReferenceAssetInput> resolveReferenceAssets(JsonNode referenceJson, Long brandId) {
@@ -718,7 +802,7 @@ public class ImageGenerationService {
     private GeneratedAssetMetadata buildModelCutMetadata(JsonNode userOptions, JsonNode references) {
         String framing = optionValue(userOptions, "framing");
         String cameraAngle = optionLabel(userOptions, "cameraAngle", CAMERA_ANGLE_LABELS);
-        String framingLabel = FRAMING_LABELS.get(framing);
+        String framingLabel = framing == null ? null : FRAMING_LABELS.get(framing);
         String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
         String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
         String poseLabel = referenceAssetLabel(references, "poseReferenceId");
@@ -733,7 +817,7 @@ public class ImageGenerationService {
         addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
 
         return new GeneratedAssetMetadata(
-                FRAMING_LABELS.containsKey(framing) ? framing : "GENERATED_IMAGE",
+                framing != null && FRAMING_LABELS.containsKey(framing) ? framing : "GENERATED_IMAGE",
                 String.join(" ", sentences)
         );
     }
@@ -774,7 +858,7 @@ public class ImageGenerationService {
 
     private String optionLabel(JsonNode options, String key, Map<String, String> labels) {
         String value = optionValue(options, key);
-        return labels.get(value);
+        return value == null ? null : labels.get(value);
     }
 
     private String optionValue(JsonNode options, String key) {
