@@ -29,5 +29,5 @@ public class ImageGenerationJobCreateReqDto {
 
     @Min(1)
     @Max(4)
-    private int requestedCount = 2;
+    private Integer requestedCount;
 }
