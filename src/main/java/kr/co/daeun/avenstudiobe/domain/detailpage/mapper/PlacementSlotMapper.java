@@ -37,7 +37,8 @@ public class PlacementSlotMapper {
                                 block.getTemplateKey(),
                                 block.getTemplateType(),
                                 slot.getSlotKey(),
-                                slot.getSlotOrder()
+                                slot.getSlotOrder(),
+                                slot.getAssetId()
                         )))
                 .toList();
     }

@@ -11,4 +11,5 @@ public class ImageSlotReqDto {
     private String slotKey;
     @NotNull
     private Integer slotOrder;
+    private Long assetId;
 }

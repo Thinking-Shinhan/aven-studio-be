@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AssetPlacementCandidate;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
@@ -16,13 +18,13 @@ import org.springframework.stereotype.Service;
 public class FallbackPlacementService {
 
     public AutoImagePlacementRespDto place(AutoPlacementContext context) {
-        if (context == null || context.slots() == null || context.slots().isEmpty()
+        if (context == null || context.targetSlots() == null || context.targetSlots().isEmpty()
                 || context.assets() == null || context.assets().isEmpty()) {
             Long productId = context == null ? null : context.productId();
             return AutoImagePlacementRespDto.empty(productId);
         }
 
-        List<PlacementSlot> slots = context.slots().stream()
+        List<PlacementSlot> slots = context.targetSlots().stream()
                 .sorted(Comparator.comparing(
                         PlacementSlot::globalSlotOrder,
                         Comparator.nullsLast(Integer::compareTo)
@@ -30,7 +32,10 @@ public class FallbackPlacementService {
                 .toList();
 
         List<ImagePlacementRespDto> placements = new ArrayList<>();
-        Set<Long> usedAssetIds = new HashSet<>();
+        Set<Long> usedAssetIds = context.slots().stream()
+                .map(PlacementSlot::assetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
         for (PlacementSlot slot : slots) {
             AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, placementPhase(slot));
 
