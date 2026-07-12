@@ -1,8 +1,14 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.ai;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AssetPlacementCandidate;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -21,6 +27,8 @@ public class AutoPlacementPromptBuilder {
                 Goal:
                 - Place the given product images into the given detail-page image slots.
                 - Decide from the overall page order, template context, product information, assetRole, and description.
+                - Slots with status FILLED are existing placements. Use them only as page context.
+                - Place new images only into slots with status EMPTY.
                 - The first available image slot should usually receive the strongest representative image.
                 - For fashion products, prefer a clear model-worn hero image first when available.
                 - If no suitable model-worn hero image exists, use a clear full-product front or overview image.
@@ -33,6 +41,8 @@ public class AutoPlacementPromptBuilder {
                 Constraints:
                 - Use only provided assetId values.
                 - Use only provided instanceKey and slotKey values.
+                - Do not change FILLED slots.
+                - Do not return FILLED slots in placements.
                 - Do not include or invent image URL values.
                 - Return JSON only.
                 - Do not wrap the response in a markdown code block.
@@ -61,12 +71,51 @@ public class AutoPlacementPromptBuilder {
 
     private Map<String, Object> toPromptPayload(AutoPlacementContext context) {
         Map<String, Object> payload = new LinkedHashMap<>();
+        Map<Long, AssetPlacementCandidate> assetMap = context.assets().stream()
+                .filter(asset -> asset.assetId() != null)
+                .collect(Collectors.toMap(
+                        AssetPlacementCandidate::assetId,
+                        Function.identity(),
+                        (first, ignored) -> first
+                ));
+        Set<Long> filledAssetIds = context.slots().stream()
+                .map(PlacementSlot::assetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
         payload.put("product", context.productInfo());
-        payload.put("slots", context.slots());
-        payload.put("assets", context.assets().stream()
+        payload.put("slots", context.slots().stream()
+                .map(slot -> toPromptSlot(slot, assetMap))
+                .toList());
+        payload.put("availableAssets", context.assets().stream()
+                .filter(asset -> asset.assetId() != null && !filledAssetIds.contains(asset.assetId()))
                 .map(this::toPromptAsset)
                 .toList());
         return payload;
+    }
+
+    private Map<String, Object> toPromptSlot(
+            PlacementSlot slot,
+            Map<Long, AssetPlacementCandidate> assetMap
+    ) {
+        Map<String, Object> promptSlot = new LinkedHashMap<>();
+        promptSlot.put("globalSlotOrder", slot.globalSlotOrder());
+        promptSlot.put("blockOrder", slot.blockOrder());
+        promptSlot.put("instanceKey", slot.instanceKey());
+        promptSlot.put("templateKey", slot.templateKey());
+        promptSlot.put("templateType", slot.templateType());
+        promptSlot.put("slotKey", slot.slotKey());
+        promptSlot.put("slotOrder", slot.slotOrder());
+        promptSlot.put("status", slot.isFilled() ? "FILLED" : "EMPTY");
+
+        if (slot.isFilled()) {
+            AssetPlacementCandidate asset = assetMap.get(slot.assetId());
+            promptSlot.put("assetId", slot.assetId());
+            promptSlot.put("assetRole", asset == null ? null : asset.assetRole());
+            promptSlot.put("description", asset == null ? null : asset.description());
+        }
+
+        return promptSlot;
     }
 
     private Map<String, Object> toPromptAsset(AssetPlacementCandidate asset) {

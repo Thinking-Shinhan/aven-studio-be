@@ -29,7 +29,7 @@ public class AutoPlacementResultValidator {
             return List.of();
         }
 
-        Map<String, PlacementSlot> slotMap = context.slots().stream()
+        Map<String, PlacementSlot> slotMap = context.targetSlots().stream()
                 .collect(Collectors.toMap(
                         slot -> slotUniqueKey(slot.instanceKey(), slot.slotKey()),
                         Function.identity(),
@@ -45,7 +45,10 @@ public class AutoPlacementResultValidator {
                 ));
 
         Set<String> usedSlotKeys = new HashSet<>();
-        Set<Long> usedAssetIds = new HashSet<>();
+        Set<Long> usedAssetIds = context.slots().stream()
+                .map(PlacementSlot::assetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
 
         return aiResponse.placements().stream()
                 .map(placement -> validatePlacement(placement, slotMap, assetMap, usedSlotKeys, usedAssetIds))

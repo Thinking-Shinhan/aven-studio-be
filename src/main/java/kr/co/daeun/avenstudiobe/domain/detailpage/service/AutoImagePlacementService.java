@@ -28,12 +28,12 @@ public class AutoImagePlacementService {
     public AutoImagePlacementRespDto autoPlace(AutoImagePlacementReqDto request) {
         AutoPlacementContext context = contextLoader.load(request);
 
-        if (context.assets().isEmpty()) {
-            throw new AutoPlacementInsufficientImageException();
+        if (context.targetSlots().isEmpty()) {
+            return AutoImagePlacementRespDto.empty(context.productId());
         }
 
-        if (context.slots().isEmpty()) {
-            return AutoImagePlacementRespDto.empty(context.productId());
+        if (context.assets().isEmpty()) {
+            throw new AutoPlacementInsufficientImageException();
         }
 
         try {

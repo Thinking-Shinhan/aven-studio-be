@@ -33,11 +33,15 @@ public class AutoPlacementContextLoader {
 
         List<Asset> assets = assetRepository.findByProductIdOrderByIdAsc(product.getId());
         List<PlacementSlot> slots = placementSlotMapper.map(request.getTemplateBlocks());
+        List<PlacementSlot> targetSlots = slots.stream()
+                .filter(PlacementSlot::isEmpty)
+                .toList();
 
         return new AutoPlacementContext(
                 product.getId(),
                 toProductPlacementInfo(product),
                 slots,
+                targetSlots,
                 assets.stream()
                         .map(this::toAssetPlacementCandidate)
                         .toList()
