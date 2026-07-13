@@ -38,6 +38,11 @@ public class AutoPlacementPromptBuilder {
                 - Use each assetId at most once.
                 - Do not fill every slot if the image is insufficient or unsuitable.
 
+                assetRole meanings for generated images:
+                - Model-worn framing: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN.
+                - Product overview: FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
+                - Product detail: DETAIL_CLOSEUP. Material detail: FABRIC_MACRO.
+
                 Constraints:
                 - Use only provided assetId values.
                 - Use only provided instanceKey and slotKey values.

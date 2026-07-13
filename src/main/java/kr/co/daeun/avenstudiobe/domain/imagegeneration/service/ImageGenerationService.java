@@ -971,11 +971,26 @@ public class ImageGenerationService {
         addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
 
         return new GeneratedAssetMetadata(
-                normalizedProductView != null
-                        ? normalizedProductView
-                        : shotReferenceKey == null ? "PRODUCT_CUT" : shotReferenceKey,
+                normalizeProductAssetRole(
+                        normalizedProductView != null ? normalizedProductView : shotReferenceKey
+                ),
                 String.join(" ", sentences)
         );
+    }
+
+    private String normalizeProductAssetRole(String shotReferenceKey) {
+        if (shotReferenceKey == null) {
+            return "PRODUCT_CUT";
+        }
+
+        return switch (shotReferenceKey) {
+            case "FRONT" -> "FRONT_VIEW";
+            case "BACK" -> "BACK_VIEW";
+            case "SIDE" -> "SIDE_VIEW";
+            case "DETAIL", "LOGO", "CONSTRUCTION" -> "DETAIL_CLOSEUP";
+            case "FABRIC" -> "FABRIC_MACRO";
+            default -> shotReferenceKey;
+        };
     }
 
     private JsonNode readStoredJson(String jsonText) {

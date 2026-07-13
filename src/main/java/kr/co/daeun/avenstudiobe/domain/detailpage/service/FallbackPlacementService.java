@@ -110,7 +110,10 @@ public class FallbackPlacementService {
 
         String normalized = assetRole.trim().toUpperCase();
 
-        if (normalized.contains("MODEL")) {
+        if (normalized.contains("MODEL") || switch (normalized) {
+            case "FULL_BODY", "THREE_QUARTER_BODY", "HALF_BODY", "CLOSE_UP", "WIDE_MARGIN" -> true;
+            default -> false;
+        }) {
             return AssetRoleGroup.MODEL;
         }
 
@@ -128,6 +131,13 @@ public class FallbackPlacementService {
 
         if (normalized.contains("MATERIAL") || normalized.contains("FABRIC")) {
             return AssetRoleGroup.MATERIAL;
+        }
+
+        if (switch (normalized) {
+            case "THREE_QUARTER", "SIDE_VIEW", "FLAT_LAY", "HANGING", "GHOST_MANNEQUIN", "FOLDED" -> true;
+            default -> false;
+        }) {
+            return AssetRoleGroup.PRODUCT;
         }
 
         if (normalized.contains("PRODUCT")) {
