@@ -304,6 +304,7 @@ public class ImageGenerationService {
                     brandMood,
                     request.getCutType(),
                     request.getPrompt(),
+                    request.getUserOptionsJson(),
                     commonReferences
             );
             List<GenerationTask> tasks = new ArrayList<>();
@@ -322,6 +323,7 @@ public class ImageGenerationService {
                     brandMood,
                     request.getCutType(),
                     request.getPrompt(),
+                    request.getUserOptionsJson(),
                     taskReferences
             );
             tasks.add(new GenerationTask(prompt, List.copyOf(taskReferences), shotReferenceId));
@@ -406,6 +408,7 @@ public class ImageGenerationService {
             BrandMood brandMood,
             String cutType,
             String userPrompt,
+            JsonNode userOptions,
             List<ReferenceAssetInput> referenceAssets
     ) {
         String brandInstruction = brandMood.getBrandInstruction();
@@ -422,14 +425,68 @@ public class ImageGenerationService {
 
                 %s
 
+                %s
+
                 [IMAGE GENERATION REQUEST]
                 %s
                 """.formatted(
                 buildSystemInstruction(cutType),
                 brandInstruction.trim(),
                 buildReferenceInstruction(cutType, referenceAssets),
+                buildUserOptionsInstruction(cutType, userOptions),
                 userPrompt.trim()
         );
+    }
+
+    private String buildUserOptionsInstruction(String cutType, JsonNode userOptions) {
+        String colorTemperature = optionLabel(
+                userOptions,
+                "colorTemperature",
+                COLOR_TEMPERATURE_LABELS
+        );
+        String cameraAngle = optionLabel(
+                userOptions,
+                "cameraAngle",
+                CAMERA_ANGLE_LABELS
+        );
+        String framing = optionLabel(
+                userOptions,
+                "framing",
+                FRAMING_LABELS
+        );
+        String aspectRatio = optionLabel(
+                userOptions,
+                "aspectRatio",
+                ASPECT_RATIO_LABELS
+        );
+
+        List<String> instructions = new ArrayList<>();
+        if (colorTemperature != null) {
+            instructions.add("- 전체 이미지의 색온도는 " + colorTemperature + " 기반으로 유지한다.");
+        }
+
+        if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            if (cameraAngle != null) {
+                instructions.add("- 카메라 각도는 " + cameraAngle + "으로 구성한다.");
+            }
+            if (framing != null) {
+                instructions.add("- 구도는 " + framing + " 구도로 구성한다.");
+            }
+        }
+
+        if (aspectRatio != null) {
+            instructions.add(
+                    "- 최종 출력 이미지의 화면 비율은 반드시 "
+                            + aspectRatio
+                            + "로 생성한다. 다른 화면 비율로 생성하지 않는다."
+            );
+        }
+
+        if (instructions.isEmpty()) {
+            return "[USER SELECTED OPTIONS]\nNo additional user options were selected.";
+        }
+
+        return "[USER SELECTED OPTIONS]\n" + String.join("\n", instructions);
     }
 
     private String buildSystemInstruction(String cutType) {

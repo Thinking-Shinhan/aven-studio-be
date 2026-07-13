@@ -88,6 +88,51 @@ class ImageGenerationServiceTest {
     }
 
     @Test
+    void modelCutUserOptionsAreCompiledIntoGenerationInstruction() throws Exception {
+        JsonNode userOptions = objectMapper.readTree("""
+                {
+                  "colorTemperature":"COOL",
+                  "cameraAngle":"EYE_LEVEL_FRONT",
+                  "framing":"THREE_QUARTER_BODY",
+                  "aspectRatio":"RATIO_3_4"
+                }
+                """);
+
+        String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
+
+        assertTrue(instruction.contains("색온도는 쿨톤 기반으로 유지한다"));
+        assertTrue(instruction.contains("카메라 각도는 정면으로 구성한다"));
+        assertTrue(instruction.contains("구도는 3/4 전신 구도로 구성한다"));
+        assertTrue(instruction.contains("화면 비율은 반드시 3:4로 생성한다"));
+    }
+
+    @Test
+    void productCutUserOptionsExcludeModelOnlyOptions() throws Exception {
+        JsonNode userOptions = objectMapper.readTree("""
+                {
+                  "colorTemperature":"NEUTRAL",
+                  "cameraAngle":"BACK_VIEW",
+                  "framing":"FULL_BODY",
+                  "aspectRatio":"RATIO_1_1"
+                }
+                """);
+
+        String instruction = invokeUserOptionsInstruction("PRODUCT_CUT", userOptions);
+
+        assertTrue(instruction.contains("색온도는 뉴트럴 기반으로 유지한다"));
+        assertTrue(instruction.contains("화면 비율은 반드시 1:1로 생성한다"));
+        assertFalse(instruction.contains("카메라 각도"));
+        assertFalse(instruction.contains("전신 구도"));
+    }
+
+    @Test
+    void omittedUserOptionsProduceEmptyOptionsInstruction() throws Exception {
+        String instruction = invokeUserOptionsInstruction("MODEL_CUT", null);
+
+        assertTrue(instruction.contains("No additional user options were selected"));
+    }
+
+    @Test
     void modelCutMetadataUsesReferenceDescriptionsInsteadOfRecommendationNames() throws Throwable {
         ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
         ReferenceAsset pose = mock(ReferenceAsset.class);
@@ -300,6 +345,16 @@ class ImageGenerationServiceTest {
         Method method = ImageGenerationService.class.getDeclaredMethod("buildSystemInstruction", String.class);
         method.setAccessible(true);
         return (String) method.invoke(service, cutType);
+    }
+
+    private String invokeUserOptionsInstruction(String cutType, JsonNode userOptions) throws Exception {
+        Method method = ImageGenerationService.class.getDeclaredMethod(
+                "buildUserOptionsInstruction",
+                String.class,
+                JsonNode.class
+        );
+        method.setAccessible(true);
+        return (String) method.invoke(service, cutType, userOptions);
     }
 
     private String invokeModelMetadataDescription(
