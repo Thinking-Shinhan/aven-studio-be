@@ -4,12 +4,15 @@ import kr.co.daeun.avenstudiobe.domain.product.dto.ProductListRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.dto.ProductRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.user.entity.User;
+import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
 import kr.co.daeun.avenstudiobe.global.common.dto.PageRespDto;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidCategoryException;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidGenderException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,6 +22,14 @@ import java.util.List;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final UsersService usersService;
+
+    public Product getAccessibleProduct(Long productId, Authentication authentication) {
+        User user = usersService.findByLoginId(authentication.getName());
+
+        return productRepository.findByIdAndBrand_Id(productId, user.getBrand().getId())
+                .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
+    }
 
     public ProductListRespDto getProductList(
             Long brandId,

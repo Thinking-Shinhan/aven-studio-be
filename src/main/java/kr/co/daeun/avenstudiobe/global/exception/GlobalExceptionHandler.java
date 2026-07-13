@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.global.exception;
 
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,25 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ClaudeApiException.class)
+    public ResponseEntity<ErrorResponse> handleClaudeApi(ClaudeApiException e) {
+        log.error("Claude API request failed", e);
+
+        HttpStatus status = e.getStatusCode() >= 500 || e.getStatusCode() == 0
+                ? HttpStatus.SERVICE_UNAVAILABLE
+                : HttpStatus.BAD_GATEWAY;
+        String code = status == HttpStatus.SERVICE_UNAVAILABLE
+                ? "AI_SERVICE_UNAVAILABLE"
+                : "AI_BAD_GATEWAY";
+        String message = status == HttpStatus.SERVICE_UNAVAILABLE
+                ? "AI 문구 생성 서비스를 일시적으로 사용할 수 없습니다."
+                : "AI 문구 생성 서비스의 응답을 처리할 수 없습니다.";
+
+        return ResponseEntity
+                .status(status)
+                .body(ErrorResponse.of(code, message));
+    }
 
     @ExceptionHandler(DuplicateUserIdException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateUserId(DuplicateUserIdException e) {

@@ -1,5 +1,7 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.AutoPlacementAiClient;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.AutoPlacementAiResponseDto;
@@ -8,6 +10,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementReqDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ImagePlacementRespDto;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
 import kr.co.daeun.avenstudiobe.domain.detailpage.validator.AutoPlacementResultValidator;
 import kr.co.daeun.avenstudiobe.global.exception.AutoPlacementInsufficientImageException;
 import lombok.RequiredArgsConstructor;
@@ -45,9 +48,17 @@ public class AutoImagePlacementService {
                     resultValidator.validateAndConvert(aiResponse, context);
 
             if (!placements.isEmpty()) {
+                AutoImagePlacementRespDto fallback =
+                        fallbackPlacementService.placeRemaining(context, placements);
+                List<ImagePlacementRespDto> mergedPlacements = new ArrayList<>(placements);
+                mergedPlacements.addAll(fallback.getPlacements());
+                mergedPlacements.sort(Comparator.comparing(
+                        placement -> findSlotOrder(context, placement),
+                        Comparator.nullsLast(Integer::compareTo)
+                ));
                 log.info("Auto image placement AI succeeded. productId={}, placementCount={}",
-                        context.productId(), placements.size());
-                return new AutoImagePlacementRespDto(context.productId(), placements);
+                        context.productId(), mergedPlacements.size());
+                return new AutoImagePlacementRespDto(context.productId(), mergedPlacements);
             }
 
             log.warn("Auto image placement AI returned no valid placements. fallback will be used. productId={}",
@@ -58,5 +69,14 @@ public class AutoImagePlacementService {
                     context.productId(), e);
             return fallbackPlacementService.place(context);
         }
+    }
+
+    private Integer findSlotOrder(AutoPlacementContext context, ImagePlacementRespDto placement) {
+        return context.slots().stream()
+                .filter(slot -> slot.instanceKey().equals(placement.getInstanceKey())
+                        && slot.slotKey().equals(placement.getSlotKey()))
+                .map(PlacementSlot::globalSlotOrder)
+                .findFirst()
+                .orElse(null);
     }
 }
