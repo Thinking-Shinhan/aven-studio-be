@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface AssetRepository extends JpaRepository<Asset, Long> {
@@ -31,4 +32,14 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
             String type,
             String status
     );
+
+    @Query("""
+            select a.id as id,
+                   a.assetRole as role,
+                   a.description as description
+            from Asset a
+            where a.product.id = :productId
+              and a.id in :assetIds
+            """)
+    List<AssetCopyProjection> findCopyContexts(Long productId, Set<Long> assetIds);
 }

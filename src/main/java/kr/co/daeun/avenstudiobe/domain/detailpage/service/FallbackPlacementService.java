@@ -18,6 +18,28 @@ import org.springframework.stereotype.Service;
 public class FallbackPlacementService {
 
     public AutoImagePlacementRespDto place(AutoPlacementContext context) {
+        return place(context, Set.of(), Set.of());
+    }
+
+    public AutoImagePlacementRespDto placeRemaining(
+            AutoPlacementContext context,
+            List<ImagePlacementRespDto> existingPlacements
+    ) {
+        Set<String> usedSlotKeys = existingPlacements == null ? Set.of() : existingPlacements.stream()
+                .map(placement -> placement.getInstanceKey() + "::" + placement.getSlotKey())
+                .collect(Collectors.toSet());
+        Set<Long> usedAssetIds = existingPlacements == null ? Set.of() : existingPlacements.stream()
+                .map(ImagePlacementRespDto::getAssetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return place(context, usedSlotKeys, usedAssetIds);
+    }
+
+    private AutoImagePlacementRespDto place(
+            AutoPlacementContext context,
+            Set<String> excludedSlotKeys,
+            Set<Long> excludedAssetIds
+    ) {
         if (context == null || context.targetSlots() == null || context.targetSlots().isEmpty()
                 || context.assets() == null || context.assets().isEmpty()) {
             Long productId = context == null ? null : context.productId();
@@ -25,6 +47,7 @@ public class FallbackPlacementService {
         }
 
         List<PlacementSlot> slots = context.targetSlots().stream()
+                .filter(slot -> !excludedSlotKeys.contains(slot.instanceKey() + "::" + slot.slotKey()))
                 .sorted(Comparator.comparing(
                         PlacementSlot::globalSlotOrder,
                         Comparator.nullsLast(Integer::compareTo)
@@ -36,6 +59,7 @@ public class FallbackPlacementService {
                 .map(PlacementSlot::assetId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(HashSet::new));
+        usedAssetIds.addAll(excludedAssetIds);
         for (PlacementSlot slot : slots) {
             AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, placementPhase(slot));
 
