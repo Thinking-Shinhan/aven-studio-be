@@ -925,15 +925,15 @@ public class ImageGenerationService {
         String framingLabel = framing == null ? null : FRAMING_LABELS.get(framing);
         String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
         String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
-        String poseLabel = referenceAssetLabel(references, "poseReferenceId");
-        String backgroundLabel = referenceAssetLabel(references, "backgroundReferenceId");
+        String poseDescription = referenceAssetDescription(references, "poseReferenceId");
+        String backgroundDescription = referenceAssetDescription(references, "backgroundReferenceId");
 
         List<String> sentences = new ArrayList<>();
         sentences.add("모델 착장컷.");
         addSentence(sentences, joinWithSpace(cameraAngle, framingLabel, "구도"));
-        addSentence(sentences, textWithSuffix(poseLabel, " 포즈를 반영했다"));
+        addSentence(sentences, labeledDescription("포즈", poseDescription));
         addSentence(sentences, textWithSuffix(colorTemperature, " 색감으로 생성되었다"));
-        addSentence(sentences, textWithSuffix(backgroundLabel, " 배경 무드를 반영했다"));
+        addSentence(sentences, labeledDescription("배경", backgroundDescription));
         addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
 
         return new GeneratedAssetMetadata(
@@ -1018,9 +1018,10 @@ public class ImageGenerationService {
         return normalizeValue(options.path(key).asText(null));
     }
 
-    private String referenceAssetLabel(JsonNode references, String key) {
+    private String referenceAssetDescription(JsonNode references, String key) {
         return findReferenceAsset(references, key)
-                .map(ReferenceAsset::getName)
+                .map(ReferenceAsset::getDescription)
+                .filter(description -> !description.isBlank())
                 .orElse(null);
     }
 
@@ -1063,6 +1064,19 @@ public class ImageGenerationService {
 
     private String textWithSuffix(String value, String suffix) {
         return value == null ? null : value + suffix;
+    }
+
+    private String labeledDescription(String label, String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+
+        String normalizedDescription = description.trim();
+        while (normalizedDescription.endsWith(".")) {
+            normalizedDescription = normalizedDescription.substring(0, normalizedDescription.length() - 1).trim();
+        }
+
+        return normalizedDescription.isBlank() ? null : label + ": " + normalizedDescription;
     }
 
     private void addSentence(List<String> sentences, String sentence) {

@@ -88,6 +88,46 @@ class ImageGenerationServiceTest {
     }
 
     @Test
+    void modelCutMetadataUsesReferenceDescriptionsInsteadOfRecommendationNames() throws Throwable {
+        ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
+        ReferenceAsset pose = mock(ReferenceAsset.class);
+        ReferenceAsset background = mock(ReferenceAsset.class);
+        when(pose.getName()).thenReturn("추천 포즈 1");
+        when(pose.getDescription()).thenReturn("한쪽 다리를 앞으로 내딛고 상체를 자연스럽게 회전한 자세.");
+        when(background.getName()).thenReturn("추천 배경 1");
+        when(background.getDescription()).thenReturn("밝은 화이트 스튜디오와 부드러운 확산광으로 구성된 공간.");
+        when(referenceAssetRepository.findById(11L)).thenReturn(Optional.of(pose));
+        when(referenceAssetRepository.findById(3L)).thenReturn(Optional.of(background));
+
+        ImageGenerationService metadataService = new ImageGenerationService(
+                null,
+                null,
+                null,
+                null,
+                null,
+                referenceAssetRepository,
+                null,
+                null,
+                null,
+                null
+        );
+        JsonNode userOptions = objectMapper.readTree("""
+                {"colorTemperature":"COOL","framing":"FULL_BODY"}
+                """);
+        JsonNode references = objectMapper.readTree("""
+                {"poseReferenceId":11,"backgroundReferenceId":3}
+                """);
+
+        String description = invokeModelMetadataDescription(metadataService, userOptions, references);
+
+        assertTrue(description.contains("포즈: 한쪽 다리를 앞으로 내딛고 상체를 자연스럽게 회전한 자세."));
+        assertTrue(description.contains("배경: 밝은 화이트 스튜디오와 부드러운 확산광으로 구성된 공간."));
+        assertFalse(description.contains("추천 포즈 1"));
+        assertFalse(description.contains("추천 배경 1"));
+        assertFalse(description.contains(".."));
+    }
+
+    @Test
     void multiShotIdsDetermineRequestedCount() throws Throwable {
         JsonNode references = objectMapper.readTree("""
                 {"shotReferenceIds":[11,12,13,14]}
@@ -260,6 +300,30 @@ class ImageGenerationServiceTest {
         Method method = ImageGenerationService.class.getDeclaredMethod("buildSystemInstruction", String.class);
         method.setAccessible(true);
         return (String) method.invoke(service, cutType);
+    }
+
+    private String invokeModelMetadataDescription(
+            ImageGenerationService targetService,
+            JsonNode userOptions,
+            JsonNode references
+    ) throws Throwable {
+        Method metadataMethod = ImageGenerationService.class.getDeclaredMethod(
+                "buildModelCutMetadata",
+                JsonNode.class,
+                JsonNode.class
+        );
+        metadataMethod.setAccessible(true);
+
+        Object metadata;
+        try {
+            metadata = metadataMethod.invoke(targetService, userOptions, references);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+
+        Method descriptionMethod = metadata.getClass().getDeclaredMethod("description");
+        descriptionMethod.setAccessible(true);
+        return (String) descriptionMethod.invoke(metadata);
     }
 
     @SuppressWarnings("unchecked")
