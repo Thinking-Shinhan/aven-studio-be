@@ -39,8 +39,10 @@ public class AutoPlacementPromptBuilder {
             - Do not fill every slot if the available images are insufficient or unsuitable.
 
             assetRole meanings for generated images:
-            - Model-worn framing: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN.
+            - Model-worn framing: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT.
             - Product overview: FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
+            - Uploaded product overview: PRODUCT_FRONT, PRODUCT_BACK, PRODUCT_IMAGE.
+            - Uploaded product detail: DETAIL.
             - Product detail: DETAIL_CLOSEUP.
             - Material detail: FABRIC_MACRO.
 
