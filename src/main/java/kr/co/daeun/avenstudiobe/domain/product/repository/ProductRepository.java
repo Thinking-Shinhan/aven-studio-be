@@ -4,10 +4,13 @@ import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,4 +54,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Product findProductByBrandAndCode(Brand brand, String code);
 
     Optional<Product> findByIdAndBrand_Id(Long id, Long brandId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    SELECT p
+    FROM Product p
+    WHERE p.id = :productId
+      AND p.brand.id = :brandId
+""")
+    Optional<Product> findAccessibleProductForUpdate(
+            @Param("productId") Long productId,
+            @Param("brandId") Long brandId
+    );
 }

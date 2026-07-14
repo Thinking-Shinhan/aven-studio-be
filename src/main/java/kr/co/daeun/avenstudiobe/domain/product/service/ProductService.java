@@ -32,6 +32,13 @@ public class ProductService {
                 .orElseThrow(ProductNotFoundException::new);
     }
 
+    public Product getAccessibleProductForUpdate(Long productId, Authentication authentication) {
+        User user = usersService.findByLoginId(authentication.getName());
+
+        return productRepository.findAccessibleProductForUpdate(productId, user.getBrand().getId())
+                .orElseThrow(ProductNotFoundException::new);
+    }
+
     public ProductListRespDto getProductList(
             Long brandId,
             String category,
