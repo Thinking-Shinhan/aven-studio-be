@@ -117,7 +117,7 @@ public class LibraryService {
 
     @Transactional(readOnly = true)
     public DetailPageRespDto getDetailPage(Long productId, Authentication authentication) {
-        productService.getAccessibleProductForUpdate(productId, authentication);
+        productService.getAccessibleProduct(productId, authentication);
 
         return detailPageRepository.findByProductId(productId)
                 .map(detailPage ->
