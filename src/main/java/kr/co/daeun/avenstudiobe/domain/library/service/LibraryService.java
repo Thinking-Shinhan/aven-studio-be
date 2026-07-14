@@ -121,7 +121,7 @@ public class LibraryService {
 
         return detailPageRepository.findByProductId(productId)
                 .map(detailPage ->
-                        DetailPageRespDto.from(productId, detailPage, gcsService.generateSignedUrl(detailPage.getFileUrl()))
+                        DetailPageRespDto.from(productId, detailPage, gcsService.generateSignedUrl(detailPage.getObjectName()))
                 )
                 .orElseGet(() ->
                         DetailPageRespDto.empty(productId)
