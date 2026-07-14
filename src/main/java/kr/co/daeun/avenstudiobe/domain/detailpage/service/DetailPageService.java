@@ -4,6 +4,7 @@ import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.*;
 import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
 import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
+import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Material;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Size;

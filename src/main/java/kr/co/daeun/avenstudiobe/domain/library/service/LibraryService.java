@@ -3,17 +3,16 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
-import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetDeleteRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetRespDto;
+import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
+import kr.co.daeun.avenstudiobe.domain.library.dto.*;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryAssetNotFoundException;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryFolderNotFoundException;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +28,9 @@ public class LibraryService {
     private final AssetRepository assetRepository;
     private final ProductRepository productRepository;
     private final GcsService gcsService;
+
+    private final ProductService productService;
+    private final DetailPageRepository detailPageRepository;
 
     @Transactional(readOnly = true)
     public ImageFolderListRespDto getImageFolders(Long brandId, String category) {
@@ -111,5 +113,18 @@ public class LibraryService {
             return null;
         }
         return category.trim();
+    }
+
+    @Transactional(readOnly = true)
+    public DetailPageRespDto getDetailPage(Long productId, Authentication authentication) {
+        productService.getAccessibleProductForUpdate(productId, authentication);
+
+        return detailPageRepository.findByProductId(productId)
+                .map(detailPage ->
+                        DetailPageRespDto.from(productId, detailPage, gcsService.generateSignedUrl(detailPage.getFileUrl()))
+                )
+                .orElseGet(() ->
+                        DetailPageRespDto.empty(productId)
+                );
     }
 }

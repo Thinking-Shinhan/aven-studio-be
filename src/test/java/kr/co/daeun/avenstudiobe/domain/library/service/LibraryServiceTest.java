@@ -3,22 +3,29 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
+import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
+import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
+import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
 import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
 import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryAssetNotFoundException;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryFolderNotFoundException;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.core.Authentication;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -29,6 +36,8 @@ class LibraryServiceTest {
     private AssetRepository assetRepository;
     private ProductRepository productRepository;
     private GcsService gcsService;
+    private ProductService productService;
+    private DetailPageRepository detailPageRepository;
     private LibraryService libraryService;
 
     @BeforeEach
@@ -36,7 +45,9 @@ class LibraryServiceTest {
         assetRepository = mock(AssetRepository.class);
         productRepository = mock(ProductRepository.class);
         gcsService = mock(GcsService.class);
-        libraryService = new LibraryService(assetRepository, productRepository, gcsService);
+        productService = mock(ProductService.class);
+        detailPageRepository = mock(DetailPageRepository.class);
+        libraryService = new LibraryService(assetRepository, productRepository, gcsService, productService, detailPageRepository);
     }
 
     @Test
@@ -128,5 +139,43 @@ class LibraryServiceTest {
                 () -> libraryService.deleteAsset(1L, 200L)
         );
         verify(gcsService, never()).delete("generated/10/20/image.png");
+    }
+
+    @Test
+    void returnsDetailPageWithSignedFileUrlWhenDetailPageExists() {
+        Authentication authentication = mock(Authentication.class);
+        Product product = mock(Product.class);
+        DetailPage detailPage = DetailPage.create(
+                product,
+                "COMPLETED",
+                "raw-file-url",
+                "detail-pages/10/detail.pdf",
+                "detail.pdf",
+                1024L
+        );
+        when(productService.getAccessibleProductForUpdate(10L, authentication)).thenReturn(product);
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
+        when(gcsService.generateSignedUrl("raw-file-url")).thenReturn("signed-url");
+
+        DetailPageRespDto response = libraryService.getDetailPage(10L, authentication);
+
+        assertEquals(10L, response.getProductId());
+        assertTrue(response.isHasDetailPage());
+        assertEquals("COMPLETED", response.getDetailPage().getStatus());
+        assertEquals("signed-url", response.getDetailPage().getFileUrl());
+        assertEquals("detail.pdf", response.getDetailPage().getFileName());
+    }
+
+    @Test
+    void returnsEmptyDetailPageWhenNoneExistsForProduct() {
+        Authentication authentication = mock(Authentication.class);
+        Product product = mock(Product.class);
+        when(productService.getAccessibleProductForUpdate(10L, authentication)).thenReturn(product);
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.empty());
+
+        DetailPageRespDto response = libraryService.getDetailPage(10L, authentication);
+
+        assertEquals(10L, response.getProductId());
+        assertFalse(response.isHasDetailPage());
     }
 }
