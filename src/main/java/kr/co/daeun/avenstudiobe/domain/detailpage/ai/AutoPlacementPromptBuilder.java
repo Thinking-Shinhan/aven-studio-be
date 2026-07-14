@@ -44,6 +44,7 @@ public class AutoPlacementPromptBuilder {
                 - Model-worn framing: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN.
                 - Product overview: FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
                 - Product detail: DETAIL_CLOSEUP. Material detail: FABRIC_MACRO.
+                - Do not make the entire page model-only when suitable unused product-overview or detail images are available.
 
                 Constraints:
                 - Use only provided assetId values.
