@@ -9,6 +9,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.service.AutoImagePlacementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,9 +31,10 @@ public class DetailPageAutoPlacementController {
             @ApiResponse(responseCode = "409", description = "배치 가능한 이미지가 없음")
     })
     public ResponseEntity<AutoImagePlacementRespDto> autoPlace(
-            @Valid @RequestBody AutoImagePlacementReqDto request
+            @Valid @RequestBody AutoImagePlacementReqDto request,
+            Authentication authentication
     ) {
-        AutoImagePlacementRespDto response = autoImagePlacementService.autoPlace(request);
+        AutoImagePlacementRespDto response = autoImagePlacementService.autoPlace(request, authentication);
         return ResponseEntity.ok(response);
     }
 }

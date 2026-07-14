@@ -47,6 +47,11 @@ anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
   model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
   max-tokens: 2048
-  timeout-seconds: 30
+  timeout-seconds: ${ANTHROPIC_TIMEOUT_SECONDS:20}
+  image-placement-timeout-seconds: ${ANTHROPIC_IMAGE_PLACEMENT_TIMEOUT_SECONDS:15}
+  max-concurrent-requests: ${ANTHROPIC_MAX_CONCURRENT_REQUESTS:4}
+  concurrency-wait-millis: ${ANTHROPIC_CONCURRENCY_WAIT_MILLIS:700}
+  max-retries: ${ANTHROPIC_MAX_RETRIES:1}
+  retry-delay-millis: ${ANTHROPIC_RETRY_DELAY_MILLIS:300}
 image-generation:
   gcs-save-enabled: ${IMAGE_GENERATION_GCS_SAVE_ENABLED:true}

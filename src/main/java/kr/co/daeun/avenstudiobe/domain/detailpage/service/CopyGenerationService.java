@@ -29,9 +29,18 @@ public class CopyGenerationService {
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CopyGenerateRespDto generate(CopyGenerateReqDto request, Authentication authentication) {
+        return generate(request, authentication, null);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public CopyGenerateRespDto generate(
+            CopyGenerateReqDto request,
+            Authentication authentication,
+            String targetInstanceKey
+    ) {
         requestValidator.validate(request);
 
-        CopyGenerationContext context = contextLoader.load(request, authentication);
+        CopyGenerationContext context = contextLoader.load(request, authentication, targetInstanceKey);
         if (context.targetSlots().isEmpty()) {
             return CopyGenerateRespDto.empty(request.getProductId());
         }

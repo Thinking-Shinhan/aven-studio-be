@@ -15,6 +15,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.validator.AutoPlacementResultV
 import kr.co.daeun.avenstudiobe.global.exception.AutoPlacementInsufficientImageException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -28,8 +29,19 @@ public class AutoImagePlacementService {
     private final AutoPlacementResultValidator resultValidator;
     private final FallbackPlacementService fallbackPlacementService;
 
-    public AutoImagePlacementRespDto autoPlace(AutoImagePlacementReqDto request) {
-        AutoPlacementContext context = contextLoader.load(request);
+    public AutoImagePlacementRespDto autoPlace(
+            AutoImagePlacementReqDto request,
+            Authentication authentication
+    ) {
+        return autoPlace(request, authentication, null);
+    }
+
+    public AutoImagePlacementRespDto autoPlace(
+            AutoImagePlacementReqDto request,
+            Authentication authentication,
+            String targetInstanceKey
+    ) {
+        AutoPlacementContext context = contextLoader.load(request, authentication, targetInstanceKey);
 
         if (context.targetSlots().isEmpty()) {
             return AutoImagePlacementRespDto.empty(context.productId());

@@ -10,31 +10,35 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ProductPlacementInfo;
 import kr.co.daeun.avenstudiobe.domain.detailpage.mapper.PlacementSlotMapper;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
-import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
-import kr.co.daeun.avenstudiobe.global.exception.ProductNotFoundException;
+import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class AutoPlacementContextLoader {
 
-    private final ProductRepository productRepository;
+    private final ProductService productService;
     private final AssetRepository assetRepository;
     private final PlacementSlotMapper placementSlotMapper;
     private final GcsService gcsService;
 
     @Transactional(readOnly = true)
-    public AutoPlacementContext load(AutoImagePlacementReqDto request) {
-        Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(ProductNotFoundException::new);
+    public AutoPlacementContext load(
+            AutoImagePlacementReqDto request,
+            Authentication authentication,
+            String targetInstanceKey
+    ) {
+        Product product = productService.getAccessibleProduct(request.getProductId(), authentication);
 
         List<Asset> assets = assetRepository.findByProductIdOrderByIdAsc(product.getId());
         List<PlacementSlot> slots = placementSlotMapper.map(request.getTemplateBlocks());
         List<PlacementSlot> targetSlots = slots.stream()
                 .filter(PlacementSlot::isEmpty)
+                .filter(slot -> targetInstanceKey == null || targetInstanceKey.equals(slot.instanceKey()))
                 .toList();
 
         return new AutoPlacementContext(

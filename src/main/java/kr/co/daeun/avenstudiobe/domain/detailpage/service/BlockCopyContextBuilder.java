@@ -23,8 +23,16 @@ public class BlockCopyContextBuilder {
             List<CopyTemplateBlockReqDto> templateBlocks,
             Map<Long, AssetCopyContext> assetMap
     ) {
+        return build(templateBlocks, assetMap, null);
+    }
+
+    public BuildResult build(
+            List<CopyTemplateBlockReqDto> templateBlocks,
+            Map<Long, AssetCopyContext> assetMap,
+            String targetInstanceKey
+    ) {
         List<CopyTemplateBlockReqDto> sortedBlocks = sortBlocks(templateBlocks);
-        List<BlockCopyContext> blockContexts = buildBlockContexts(sortedBlocks, assetMap);
+        List<BlockCopyContext> blockContexts = buildBlockContexts(sortedBlocks, assetMap, targetInstanceKey);
         Set<CopySlotKey> targetSlots = collectTargetSlots(blockContexts);
 
         return new BuildResult(blockContexts, targetSlots);
@@ -42,7 +50,8 @@ public class BlockCopyContextBuilder {
 
     private List<BlockCopyContext> buildBlockContexts(
             List<CopyTemplateBlockReqDto> sortedBlocks,
-            Map<Long, AssetCopyContext> assetMap
+            Map<Long, AssetCopyContext> assetMap,
+            String targetInstanceKey
     ) {
         List<BlockCopyContext> blockContexts = new ArrayList<>();
         List<AssetCopyContext> previousBlockPlacedAssets = List.of();
@@ -59,7 +68,7 @@ public class BlockCopyContextBuilder {
                     block.getTemplateKey(),
                     placedAssets,
                     referenceAssets,
-                    toTextSlotContexts(block)
+                    toTextSlotContexts(block, targetInstanceKey)
             ));
 
             previousBlockPlacedAssets = placedAssets;
@@ -86,7 +95,10 @@ public class BlockCopyContextBuilder {
                 .toList();
     }
 
-    private List<TextSlotCopyContext> toTextSlotContexts(CopyTemplateBlockReqDto block) {
+    private List<TextSlotCopyContext> toTextSlotContexts(
+            CopyTemplateBlockReqDto block,
+            String targetInstanceKey
+    ) {
         return safeList(block.getTextSlots()).stream()
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(
@@ -99,7 +111,7 @@ public class BlockCopyContextBuilder {
                         slot.getTextRole(),
                         slot.getRecommendedMaxLength(),
                         slot.getCurrentContent(),
-                        isGenerationTarget(slot)
+                        isGenerationTarget(block, slot, targetInstanceKey)
                 ))
                 .toList();
     }
@@ -118,8 +130,15 @@ public class BlockCopyContextBuilder {
         return Set.copyOf(targetSlots);
     }
 
-    private boolean isGenerationTarget(TextSlotReqDto slot) {
-        return slot.getCurrentContent() == null || slot.getCurrentContent().isBlank();
+    private boolean isGenerationTarget(
+            CopyTemplateBlockReqDto block,
+            TextSlotReqDto slot,
+            String targetInstanceKey
+    ) {
+        boolean isTargetBlock = targetInstanceKey == null
+                || targetInstanceKey.equals(block.getInstanceKey());
+        return isTargetBlock
+                && (slot.getCurrentContent() == null || slot.getCurrentContent().isBlank());
     }
 
     private <T> List<T> safeList(List<T> values) {
