@@ -39,22 +39,41 @@ public class AutoPlacementPromptBuilder {
             - Do not fill every slot if the available images are insufficient or unsuitable.
 
             assetRole meanings for generated images:
-            - Model-worn framing: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT.
-            - Product overview: FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
-            - Uploaded product overview: PRODUCT_FRONT, PRODUCT_BACK, PRODUCT_IMAGE.
-            - Uploaded product detail: DETAIL.
-            - Product detail: DETAIL_CLOSEUP.
+            - Model-worn images: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT.
+            - Product overview: PRODUCT_FRONT, PRODUCT_BACK, PRODUCT_IMAGE, FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
+            - Product detail: DETAIL_CLOSEUP, DETAIL.
             - Material detail: FABRIC_MACRO.
 
-            Page sequence rules:
-            - First consider the full sequence of image slots in globalSlotOrder, including FILLED, EMPTY, and CONTEXT_EMPTY slots.
-            - Judge each EMPTY slot by its relative position in the full page, not by the order of EMPTY slots alone.
-            - Model-worn images should remain the majority and are generally preferred in the early and middle parts of the page.
-            - Use model-worn images with meaningfully different framing, styling, movement, or use cases rather than redundant views.
-            - Introduce at least one product-overview image in a later part of the page when a suitable asset is available.
-            - If later image slots still remain, do not force a product-overview or detail image too early solely for category diversity.
-            - When filling a late or final image slot, ensure that a product-overview image is represented before adding another redundant model-worn image.
-            - Detail or material images are optional and should be used near the end only when the page has enough slots and they add new information.
+            Decision process:
+            - Follow these steps in order before selecting any asset.
+                
+            1. Analyze current page coverage.
+               - Classify every FILLED slot as MODEL_WORN, PRODUCT_OVERVIEW, PRODUCT_DETAIL, or MATERIAL_DETAIL.
+               - Determine which information is already represented on the page.
+                
+            2. Analyze remaining placement opportunities.
+               - Count the current EMPTY slots and later CONTEXT_EMPTY slots.
+               - Determine whether missing information can be placed in a later slot or whether the current EMPTY slot is the final opportunity.
+                
+            3. Assign an image category to each EMPTY slot.
+               - Model-worn images should remain the majority category. But, A completed page should include at least one clear product-overview image when a suitable asset is available.
+               - Product-detail and material-detail images are optional and should be considered after model-worn and product-overview coverage already exist.
+               - If the current EMPTY slot is the final opportunity and the page has no product-overview image, assign product front image to that slot.
+               - If suitable later slots still remain, missing product-overview or detail coverage may be deferred to a later slot.
+            
+            4. Select an asset only after assigning the required category.
+               - First filter candidates to the assigned category.
+               - Then use assetRole and description to choose the best asset within that category.
+               - For the first PRODUCT_OVERVIEW image, prefer a clear standalone front view.
+               - Consider framing, pose, styling, and use-case variation only when comparing assets within the same assigned category.
+            
+            Priority order:
+            - Required page coverage
+            - Relative slot position and remaining opportunities
+            - Best assetRole within the required category
+            - Framing or styling variation within that category
+            
+            Do not skip directly to asset selection.
 
             Constraints:
             - Use only provided assetId values.

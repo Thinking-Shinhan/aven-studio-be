@@ -45,10 +45,10 @@ google:
     timeout-seconds: ${GOOGLE_AI_TIMEOUT_SECONDS:120}
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
-  model: ${ANTHROPIC_MODEL:claude-haiku-4-5}
+  model: ${ANTHROPIC_MODEL:claude-sonnet-4-6}
   max-tokens: 2048
   timeout-seconds: ${ANTHROPIC_TIMEOUT_SECONDS:20}
-  image-placement-timeout-seconds: ${ANTHROPIC_IMAGE_PLACEMENT_TIMEOUT_SECONDS:15}
+  image-placement-timeout-seconds: ${ANTHROPIC_IMAGE_PLACEMENT_TIMEOUT_SECONDS:20}
   max-concurrent-requests: ${ANTHROPIC_MAX_CONCURRENT_REQUESTS:4}
   concurrency-wait-millis: ${ANTHROPIC_CONCURRENCY_WAIT_MILLIS:700}
   max-retries: ${ANTHROPIC_MAX_RETRIES:1}
