@@ -1,0 +1,115 @@
+package kr.co.daeun.avenstudiobe.domain.library.service;
+
+import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
+import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetDeleteRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetRespDto;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.global.exception.LibraryAssetNotFoundException;
+import kr.co.daeun.avenstudiobe.global.exception.LibraryFolderNotFoundException;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class LibraryService {
+
+    private static final String GENERATED_TYPE = "GENERATED";
+    private static final String GENERATED_STATUS = "GENERATED";
+
+    private final AssetRepository assetRepository;
+    private final ProductRepository productRepository;
+    private final GcsService gcsService;
+
+    @Transactional(readOnly = true)
+    public ImageFolderListRespDto getImageFolders(Long brandId, String category) {
+        String normalizedCategory = normalizeCategory(category);
+        List<ImageFolderRespDto> folders = assetRepository
+                .findLibraryImageFolders(brandId, normalizedCategory)
+                .stream()
+                .map(this::toImageFolderResponse)
+                .toList();
+
+        return new ImageFolderListRespDto(folders);
+    }
+
+    @Transactional(readOnly = true)
+    public LibraryAssetListRespDto getFolderAssets(Long brandId, Long productId) {
+        Product product = productRepository.findByIdAndBrand_Id(productId, brandId)
+                .orElseThrow(LibraryFolderNotFoundException::new);
+        List<LibraryAssetRespDto> assets = assetRepository
+                .findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
+                        productId,
+                        brandId,
+                        GENERATED_TYPE,
+                        GENERATED_STATUS
+                )
+                .stream()
+                .map(this::toLibraryAssetResponse)
+                .toList();
+
+        return new LibraryAssetListRespDto(
+                product.getId(),
+                product.getCode(),
+                product.getName(),
+                product.getCategory(),
+                assets
+        );
+    }
+
+    @Transactional
+    public LibraryAssetDeleteRespDto deleteAsset(Long brandId, Long assetId) {
+        Asset asset = assetRepository.findByIdAndProduct_Brand_IdAndTypeAndStatus(
+                        assetId,
+                        brandId,
+                        GENERATED_TYPE,
+                        GENERATED_STATUS
+                )
+                .orElseThrow(LibraryAssetNotFoundException::new);
+
+        gcsService.delete(asset.getObjectName());
+        asset.markDeleted();
+
+        return new LibraryAssetDeleteRespDto(asset.getId(), "이미지가 삭제되었습니다.");
+    }
+
+    private ImageFolderRespDto toImageFolderResponse(LibraryImageFolderProjection folder) {
+        return new ImageFolderRespDto(
+                folder.getProductId(),
+                folder.getProductCode(),
+                folder.getProductName(),
+                folder.getCategory(),
+                folder.getAssetCount(),
+                folder.getThumbnailAssetId(),
+                gcsService.generateSignedUrl(folder.getThumbnailObjectName())
+        );
+    }
+
+    private LibraryAssetRespDto toLibraryAssetResponse(Asset asset) {
+        return new LibraryAssetRespDto(
+                asset.getId(),
+                asset.getType(),
+                asset.getAssetRole(),
+                gcsService.generateSignedUrl(asset.getObjectName()),
+                asset.getDescription(),
+                asset.getStatus(),
+                asset.getCreatedAt()
+        );
+    }
+
+    private String normalizeCategory(String category) {
+        if (category == null || category.isBlank()) {
+            return null;
+        }
+        return category.trim();
+    }
+}

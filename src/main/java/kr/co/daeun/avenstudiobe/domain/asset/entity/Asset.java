@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 @Builder
 public class Asset {
 
+    private static final String DELETED_STATUS = "DELETED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -60,5 +62,9 @@ public class Asset {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id")
     private Product product;
+
+    public void markDeleted() {
+        this.status = DELETED_STATUS;
+    }
 
 }

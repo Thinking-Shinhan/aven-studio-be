@@ -201,6 +201,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
     }
 
+    @ExceptionHandler({LibraryFolderNotFoundException.class, LibraryAssetNotFoundException.class})
+    public ResponseEntity<ErrorResponse> handleLibraryNotFound(RuntimeException e) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
+    }
+
     @ExceptionHandler(SheetAlreadyConnectedException.class)
     public ResponseEntity<ErrorResponse> handleSheetAlreadyConnected(SheetAlreadyConnectedException e) {
         return ResponseEntity
