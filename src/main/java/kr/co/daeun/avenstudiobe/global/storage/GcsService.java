@@ -4,6 +4,7 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import kr.co.daeun.avenstudiobe.global.exception.UnsupportedImageMediaTypeException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,7 +92,7 @@ public class GcsService {
 
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) {
-            return "";
+            throw new UnsupportedImageMediaTypeException();
         }
 
         String extension = filename.substring(filename.lastIndexOf(".")).toLowerCase();
@@ -100,7 +101,7 @@ public class GcsService {
                 && !extension.equals(".jpeg")
                 && !extension.equals(".png")
                 && !extension.equals(".webp")) {
-            throw new IllegalArgumentException("허용되지 않는 이미지 확장자입니다.");
+            throw new UnsupportedImageMediaTypeException();
         }
 
         return extension;
@@ -116,27 +117,99 @@ public class GcsService {
 
     private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("파일이 비어 있습니다.");
+            throw new IllegalArgumentException("필수 입력값이 누락되었거나 이미지 파일이 올바르지 않습니다.");
         }
 
-        String contentType = file.getContentType();
-        String filename = file.getOriginalFilename();
+        String contentType = normalizeUploadedContentType(file.getContentType());
+        String extension = getExtension(file.getOriginalFilename());
+        String detectedContentType = detectImageContentType(file);
 
-        boolean validContentType = contentType != null &&
-                (contentType.equals("image/jpeg")
-                        || contentType.equals("image/png")
-                        || contentType.equals("image/webp")
-                        || contentType.equals("image/x-png"));
-
-        boolean validExtension = filename != null &&
-                (filename.toLowerCase().endsWith(".jpg")
-                        || filename.toLowerCase().endsWith(".jpeg")
-                        || filename.toLowerCase().endsWith(".png")
-                        || filename.toLowerCase().endsWith(".webp"));
-
-        if (!validContentType && !validExtension) {
-            throw new IllegalArgumentException("jpg, png, webp 이미지만 업로드할 수 있습니다.");
+        if (!contentType.equals(detectedContentType)
+                || !extensionMatchesContentType(extension, detectedContentType)) {
+            throw new IllegalArgumentException("필수 입력값이 누락되었거나 이미지 파일이 올바르지 않습니다.");
         }
+    }
+
+    private String normalizeUploadedContentType(String contentType) {
+        if ("image/png".equals(contentType) || "image/x-png".equals(contentType)) {
+            return "image/png";
+        }
+
+        if ("image/jpeg".equals(contentType) || "image/jpg".equals(contentType)) {
+            return "image/jpeg";
+        }
+
+        if ("image/webp".equals(contentType)) {
+            return "image/webp";
+        }
+
+        throw new UnsupportedImageMediaTypeException();
+    }
+
+    private String detectImageContentType(MultipartFile file) {
+        try (var inputStream = file.getInputStream()) {
+            byte[] header = inputStream.readNBytes(12);
+
+            if (isPng(header)) {
+                return "image/png";
+            }
+
+            if (isJpeg(header)) {
+                return "image/jpeg";
+            }
+
+            if (isWebp(header)) {
+                return "image/webp";
+            }
+
+            throw invalidImageFile();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("필수 입력값이 누락되었거나 이미지 파일이 올바르지 않습니다.", e);
+        }
+    }
+
+    private boolean extensionMatchesContentType(String extension, String contentType) {
+        return switch (contentType) {
+            case "image/png" -> extension.equals(".png");
+            case "image/jpeg" -> extension.equals(".jpg") || extension.equals(".jpeg");
+            case "image/webp" -> extension.equals(".webp");
+            default -> false;
+        };
+    }
+
+    private boolean isPng(byte[] header) {
+        return header.length >= 8
+                && (header[0] & 0xFF) == 0x89
+                && header[1] == 0x50
+                && header[2] == 0x4E
+                && header[3] == 0x47
+                && header[4] == 0x0D
+                && header[5] == 0x0A
+                && header[6] == 0x1A
+                && header[7] == 0x0A;
+    }
+
+    private boolean isJpeg(byte[] header) {
+        return header.length >= 3
+                && (header[0] & 0xFF) == 0xFF
+                && (header[1] & 0xFF) == 0xD8
+                && (header[2] & 0xFF) == 0xFF;
+    }
+
+    private boolean isWebp(byte[] header) {
+        return header.length >= 12
+                && header[0] == 'R'
+                && header[1] == 'I'
+                && header[2] == 'F'
+                && header[3] == 'F'
+                && header[8] == 'W'
+                && header[9] == 'E'
+                && header[10] == 'B'
+                && header[11] == 'P';
+    }
+
+    private IllegalArgumentException invalidImageFile() {
+        return new IllegalArgumentException("필수 입력값이 누락되었거나 이미지 파일이 올바르지 않습니다.");
     }
 
     private void validateGeneratedImage(byte[] bytes, String contentType) {

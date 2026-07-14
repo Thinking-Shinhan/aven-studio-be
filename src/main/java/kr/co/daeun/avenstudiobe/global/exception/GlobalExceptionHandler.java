@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice
@@ -70,11 +71,28 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("BAD_REQUEST", e.getMessage()));
     }
 
+    @ExceptionHandler(UnsupportedImageMediaTypeException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedImageMediaType(UnsupportedImageMediaTypeException e) {
+        return ResponseEntity
+                .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ErrorResponse.of("UNSUPPORTED_MEDIA_TYPE", e.getMessage()));
+    }
+
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestParameter(MissingServletRequestParameterException e) {
         return ResponseEntity
                 .badRequest()
                 .body(ErrorResponse.of("BAD_REQUEST", getRequestParameterMessage(e.getParameterName())));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRequestPart(MissingServletRequestPartException e) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(
+                        "BAD_REQUEST",
+                        "필수 입력값이 누락되었거나 이미지 파일이 올바르지 않습니다."
+                ));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -104,7 +122,7 @@ public class GlobalExceptionHandler {
         log.warn("업로드 가능한 크기 또는 multipart 헤더 크기 초과", e);
         return ResponseEntity
                 .status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ErrorResponse.of("PAYLOAD_TOO_LARGE", "업로드 가능한 파일 크기 또는 파일명 길이를 초과했습니다."));
+                .body(ErrorResponse.of("FILE_SIZE_EXCEEDED", "업로드 가능한 이미지 용량을 초과했습니다."));
     }
 
     @ExceptionHandler(Exception.class)

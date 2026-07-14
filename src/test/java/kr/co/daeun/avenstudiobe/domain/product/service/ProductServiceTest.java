@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
@@ -40,5 +41,24 @@ class ProductServiceTest {
 
         assertEquals("상품 정보를 찾을 수 없습니다.", exception.getMessage());
         verify(productRepository).findByIdAndBrand_Id(1L, 10L);
+    }
+
+    @Test
+    void locksAccessibleProductForUpdate() {
+        Authentication authentication = mock(Authentication.class);
+        User user = mock(User.class);
+        Brand brand = mock(Brand.class);
+        Product product = mock(Product.class);
+
+        when(authentication.getName()).thenReturn("user");
+        when(usersService.findByLoginId("user")).thenReturn(user);
+        when(user.getBrand()).thenReturn(brand);
+        when(brand.getId()).thenReturn(10L);
+        when(productRepository.findAccessibleProductForUpdate(1L, 10L)).thenReturn(Optional.of(product));
+
+        Product result = service.getAccessibleProductForUpdate(1L, authentication);
+
+        assertEquals(product, result);
+        verify(productRepository).findAccessibleProductForUpdate(1L, 10L);
     }
 }
