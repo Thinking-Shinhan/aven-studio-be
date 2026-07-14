@@ -1,7 +1,5 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
-import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
-import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.*;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Material;
@@ -9,12 +7,12 @@ import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Size;
 import kr.co.daeun.avenstudiobe.domain.product.entity.SizeMeasurement;
 import kr.co.daeun.avenstudiobe.domain.product.repository.MaterialRepository;
-import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.product.repository.SizeMeasurementRepository;
 import kr.co.daeun.avenstudiobe.domain.product.repository.SizeRepository;
-import kr.co.daeun.avenstudiobe.global.exception.ProductNotFoundException;
+import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,17 +24,15 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class DetailPageService {
-    private final ProductRepository productRepository;
-    private final AssetRepository assetRepository;
+    private final ProductService productService;
     private final MaterialRepository materialRepository;
     private final SizeRepository sizeRepository;
     private final SizeMeasurementRepository sizeMeasurementRepository;
     private final AssetService assetService;
 
     @Transactional(readOnly = true)
-    public DetailPageInitRespDto getInitData(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(ProductNotFoundException::new);
+    public DetailPageInitRespDto getInitData(Long productId, Authentication authentication) {
+        Product product = productService.getAccessibleProduct(productId, authentication);
 
         List<Material> materials = materialRepository.findByProductId(productId);
 

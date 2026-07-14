@@ -9,6 +9,7 @@ import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
 import kr.co.daeun.avenstudiobe.global.common.dto.PageRespDto;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidCategoryException;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidGenderException;
+import kr.co.daeun.avenstudiobe.global.exception.ProductNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,7 +29,7 @@ public class ProductService {
         User user = usersService.findByLoginId(authentication.getName());
 
         return productRepository.findByIdAndBrand_Id(productId, user.getBrand().getId())
-                .orElseThrow(() -> new IllegalArgumentException("상품이 존재하지 않거나 접근 권한이 없습니다."));
+                .orElseThrow(ProductNotFoundException::new);
     }
 
     public ProductListRespDto getProductList(

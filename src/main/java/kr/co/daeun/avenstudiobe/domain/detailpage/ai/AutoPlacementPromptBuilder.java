@@ -8,6 +8,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AssetPlacementCandidate;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlotKey;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ public class AutoPlacementPromptBuilder {
                 - Place the given product images into the given detail-page image slots.
                 - Decide from the overall page order, template context, product information, assetRole, and description.
                 - Slots with status FILLED are existing placements. Use them only as page context.
+                - Slots with status CONTEXT_EMPTY are empty non-target slots. Use them only as page context.
                 - Place new images only into slots with status EMPTY.
                 - The first available image slot should usually receive the strongest representative image.
                 - For fashion products, prefer a clear model-worn hero image first when available.
@@ -47,6 +49,7 @@ public class AutoPlacementPromptBuilder {
                 - Use only provided assetId values.
                 - Use only provided instanceKey and slotKey values.
                 - Do not change FILLED slots.
+                - Do not return CONTEXT_EMPTY slots in placements.
                 - Do not return FILLED slots in placements.
                 - Do not include or invent image URL values.
                 - Return JSON only.
@@ -63,6 +66,11 @@ public class AutoPlacementPromptBuilder {
                     }
                   ]
                 }
+
+                Copy style consistency:
+                - Use currentContent in non-generation-target slots as style reference, prioritizing the same textRole and nearby blocks.
+                - Preserve recurring patterns in tone, language, casing, sentence form, and length without copying phrases verbatim.
+                - If references are insufficient or inconsistent, write naturally in the product's primary language according to the textRole.
                 """;
     }
 
@@ -87,10 +95,13 @@ public class AutoPlacementPromptBuilder {
                 .map(PlacementSlot::assetId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        Set<PlacementSlotKey> targetSlotKeys = context.targetSlots().stream()
+                .map(slot -> new PlacementSlotKey(slot.instanceKey(), slot.slotKey()))
+                .collect(Collectors.toSet());
 
         payload.put("product", context.productInfo());
         payload.put("slots", context.slots().stream()
-                .map(slot -> toPromptSlot(slot, assetMap))
+                .map(slot -> toPromptSlot(slot, assetMap, targetSlotKeys))
                 .toList());
         payload.put("availableAssets", context.assets().stream()
                 .filter(asset -> asset.assetId() != null && !filledAssetIds.contains(asset.assetId()))
@@ -101,7 +112,8 @@ public class AutoPlacementPromptBuilder {
 
     private Map<String, Object> toPromptSlot(
             PlacementSlot slot,
-            Map<Long, AssetPlacementCandidate> assetMap
+            Map<Long, AssetPlacementCandidate> assetMap,
+            Set<PlacementSlotKey> targetSlotKeys
     ) {
         Map<String, Object> promptSlot = new LinkedHashMap<>();
         promptSlot.put("globalSlotOrder", slot.globalSlotOrder());
@@ -111,7 +123,7 @@ public class AutoPlacementPromptBuilder {
         promptSlot.put("templateType", slot.templateType());
         promptSlot.put("slotKey", slot.slotKey());
         promptSlot.put("slotOrder", slot.slotOrder());
-        promptSlot.put("status", slot.isFilled() ? "FILLED" : "EMPTY");
+        promptSlot.put("status", resolveSlotStatus(slot, targetSlotKeys));
 
         if (slot.isFilled()) {
             AssetPlacementCandidate asset = assetMap.get(slot.assetId());
@@ -121,6 +133,16 @@ public class AutoPlacementPromptBuilder {
         }
 
         return promptSlot;
+    }
+
+    private String resolveSlotStatus(PlacementSlot slot, Set<PlacementSlotKey> targetSlotKeys) {
+        if (slot.isFilled()) {
+            return "FILLED";
+        }
+
+        return targetSlotKeys.contains(new PlacementSlotKey(slot.instanceKey(), slot.slotKey()))
+                ? "EMPTY"
+                : "CONTEXT_EMPTY";
     }
 
     private Map<String, Object> toPromptAsset(AssetPlacementCandidate asset) {

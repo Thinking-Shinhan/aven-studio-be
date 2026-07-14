@@ -2,8 +2,10 @@ package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -12,33 +14,26 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlotKey;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FallbackPlacementService {
 
     public AutoImagePlacementRespDto place(AutoPlacementContext context) {
-        return place(context, Set.of(), Set.of());
+        return place(context, List.of());
     }
 
     public AutoImagePlacementRespDto placeRemaining(
             AutoPlacementContext context,
             List<ImagePlacementRespDto> existingPlacements
     ) {
-        Set<String> usedSlotKeys = existingPlacements == null ? Set.of() : existingPlacements.stream()
-                .map(placement -> placement.getInstanceKey() + "::" + placement.getSlotKey())
-                .collect(Collectors.toSet());
-        Set<Long> usedAssetIds = existingPlacements == null ? Set.of() : existingPlacements.stream()
-                .map(ImagePlacementRespDto::getAssetId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        return place(context, usedSlotKeys, usedAssetIds);
+        return place(context, existingPlacements == null ? List.of() : existingPlacements);
     }
 
     private AutoImagePlacementRespDto place(
             AutoPlacementContext context,
-            Set<String> excludedSlotKeys,
-            Set<Long> excludedAssetIds
+            List<ImagePlacementRespDto> existingPlacements
     ) {
         if (context == null || context.targetSlots() == null || context.targetSlots().isEmpty()
                 || context.assets() == null || context.assets().isEmpty()) {
@@ -46,8 +41,11 @@ public class FallbackPlacementService {
             return AutoImagePlacementRespDto.empty(productId);
         }
 
+        Set<PlacementSlotKey> excludedSlotKeys = existingPlacements.stream()
+                .map(placement -> new PlacementSlotKey(placement.getInstanceKey(), placement.getSlotKey()))
+                .collect(Collectors.toSet());
         List<PlacementSlot> slots = context.targetSlots().stream()
-                .filter(slot -> !excludedSlotKeys.contains(slot.instanceKey() + "::" + slot.slotKey()))
+                .filter(slot -> !excludedSlotKeys.contains(new PlacementSlotKey(slot.instanceKey(), slot.slotKey())))
                 .sorted(Comparator.comparing(
                         PlacementSlot::globalSlotOrder,
                         Comparator.nullsLast(Integer::compareTo)
@@ -55,15 +53,20 @@ public class FallbackPlacementService {
                 .toList();
 
         List<ImagePlacementRespDto> placements = new ArrayList<>();
+        List<PlacementSlot> unfilledSlots = new ArrayList<>();
         Set<Long> usedAssetIds = context.slots().stream()
                 .map(PlacementSlot::assetId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(HashSet::new));
-        usedAssetIds.addAll(excludedAssetIds);
+        usedAssetIds.addAll(existingPlacements.stream()
+                .map(ImagePlacementRespDto::getAssetId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
         for (PlacementSlot slot : slots) {
             AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, placementPhase(slot));
 
             if (asset == null) {
+                unfilledSlots.add(slot);
                 continue;
             }
 
@@ -71,7 +74,99 @@ public class FallbackPlacementService {
             placements.add(toResponse(slot, asset));
         }
 
+        placeByReusingAssets(context, existingPlacements, placements, unfilledSlots);
+
         return new AutoImagePlacementRespDto(context.productId(), placements);
+    }
+
+    private void placeByReusingAssets(
+            AutoPlacementContext context,
+            List<ImagePlacementRespDto> existingPlacements,
+            List<ImagePlacementRespDto> placements,
+            List<PlacementSlot> unfilledSlots
+    ) {
+        if (unfilledSlots.isEmpty()) {
+            return;
+        }
+
+        Map<Integer, Long> assetIdByGlobalSlotOrder = new HashMap<>();
+        Map<Long, Integer> useCounts = new HashMap<>();
+
+        for (PlacementSlot slot : context.slots()) {
+            if (slot.assetId() != null) {
+                assetIdByGlobalSlotOrder.put(slot.globalSlotOrder(), slot.assetId());
+                useCounts.merge(slot.assetId(), 1, Integer::sum);
+            }
+        }
+        registerPlacements(context, existingPlacements, assetIdByGlobalSlotOrder, useCounts);
+        registerPlacements(context, placements, assetIdByGlobalSlotOrder, useCounts);
+
+        for (PlacementSlot slot : unfilledSlots) {
+            Long previousAssetId = findPreviousAssetId(assetIdByGlobalSlotOrder, slot.globalSlotOrder());
+            AssetPlacementCandidate asset = chooseReusableAsset(
+                    context.assets(),
+                    useCounts,
+                    previousAssetId,
+                    placementPhase(slot)
+            );
+            if (asset == null) {
+                continue;
+            }
+
+            placements.add(toResponse(slot, asset));
+            assetIdByGlobalSlotOrder.put(slot.globalSlotOrder(), asset.assetId());
+            useCounts.merge(asset.assetId(), 1, Integer::sum);
+        }
+    }
+
+    private void registerPlacements(
+            AutoPlacementContext context,
+            List<ImagePlacementRespDto> placements,
+            Map<Integer, Long> assetIdByGlobalSlotOrder,
+            Map<Long, Integer> useCounts
+    ) {
+        for (ImagePlacementRespDto placement : placements) {
+            if (placement == null || placement.getAssetId() == null) {
+                continue;
+            }
+
+            context.slots().stream()
+                    .filter(slot -> slot.instanceKey().equals(placement.getInstanceKey())
+                            && slot.slotKey().equals(placement.getSlotKey()))
+                    .findFirst()
+                    .ifPresent(slot -> assetIdByGlobalSlotOrder.put(slot.globalSlotOrder(), placement.getAssetId()));
+            useCounts.merge(placement.getAssetId(), 1, Integer::sum);
+        }
+    }
+
+    private AssetPlacementCandidate chooseReusableAsset(
+            List<AssetPlacementCandidate> assets,
+            Map<Long, Integer> useCounts,
+            Long previousAssetId,
+            PlacementPhase phase
+    ) {
+        return assets.stream()
+                .filter(asset -> asset.assetId() != null)
+                .sorted(Comparator
+                        .comparingInt((AssetPlacementCandidate asset) ->
+                                Objects.equals(asset.assetId(), previousAssetId) ? 1 : 0)
+                        .thenComparingInt(asset -> useCounts.getOrDefault(asset.assetId(), 0))
+                        .thenComparingInt(asset -> priority(asset.assetRole(), phase))
+                        .thenComparing(AssetPlacementCandidate::assetId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Long findPreviousAssetId(Map<Integer, Long> assetIdByGlobalSlotOrder, Integer currentOrder) {
+        if (currentOrder == null) {
+            return null;
+        }
+
+        return assetIdByGlobalSlotOrder.entrySet().stream()
+                .filter(entry -> entry.getKey() != null && entry.getKey() < currentOrder)
+                .max(Map.Entry.comparingByKey())
+                .map(Map.Entry::getValue)
+                .orElse(null);
     }
 
     private AssetPlacementCandidate chooseAsset(

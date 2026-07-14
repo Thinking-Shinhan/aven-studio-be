@@ -32,7 +32,11 @@ public class CopyGenerationContextLoader {
     private final BlockCopyContextBuilder blockCopyContextBuilder;
 
     @Transactional(readOnly = true)
-    public CopyGenerationContext load(CopyGenerateReqDto request, Authentication authentication) {
+    public CopyGenerationContext load(
+            CopyGenerateReqDto request,
+            Authentication authentication,
+            String targetInstanceKey
+    ) {
         Product product = productService.getAccessibleProduct(request.getProductId(), authentication);
         ProductCopyContext productContext = productCopyContextMapper.from(product);
 
@@ -44,7 +48,7 @@ public class CopyGenerationContextLoader {
         }
 
         BlockCopyContextBuilder.BuildResult buildResult =
-                blockCopyContextBuilder.build(request.getTemplateBlocks(), assetMap);
+                blockCopyContextBuilder.build(request.getTemplateBlocks(), assetMap, targetInstanceKey);
 
         return new CopyGenerationContext(
                 productContext,

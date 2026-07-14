@@ -14,6 +14,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AssetPlacementCandidate;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.AutoPlacementContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ImagePlacementRespDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlot;
+import kr.co.daeun.avenstudiobe.domain.detailpage.dto.PlacementSlotKey;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -29,9 +30,9 @@ public class AutoPlacementResultValidator {
             return List.of();
         }
 
-        Map<String, PlacementSlot> slotMap = context.targetSlots().stream()
+        Map<PlacementSlotKey, PlacementSlot> slotMap = context.targetSlots().stream()
                 .collect(Collectors.toMap(
-                        slot -> slotUniqueKey(slot.instanceKey(), slot.slotKey()),
+                        slot -> new PlacementSlotKey(slot.instanceKey(), slot.slotKey()),
                         Function.identity(),
                         (first, ignored) -> first
                 ));
@@ -44,7 +45,7 @@ public class AutoPlacementResultValidator {
                         (first, ignored) -> first
                 ));
 
-        Set<String> usedSlotKeys = new HashSet<>();
+        Set<PlacementSlotKey> usedSlotKeys = new HashSet<>();
         Set<Long> usedAssetIds = context.slots().stream()
                 .map(PlacementSlot::assetId)
                 .filter(Objects::nonNull)
@@ -63,9 +64,9 @@ public class AutoPlacementResultValidator {
 
     private ValidPlacement validatePlacement(
             AiPlacementDto placement,
-            Map<String, PlacementSlot> slotMap,
+            Map<PlacementSlotKey, PlacementSlot> slotMap,
             Map<Long, AssetPlacementCandidate> assetMap,
-            Set<String> usedSlotKeys,
+            Set<PlacementSlotKey> usedSlotKeys,
             Set<Long> usedAssetIds
     ) {
         if (placement == null) {
@@ -73,8 +74,8 @@ public class AutoPlacementResultValidator {
             return null;
         }
 
-        String slotUniqueKey = slotUniqueKey(placement.instanceKey(), placement.slotKey());
-        PlacementSlot slot = slotMap.get(slotUniqueKey);
+        PlacementSlotKey slotKey = new PlacementSlotKey(placement.instanceKey(), placement.slotKey());
+        PlacementSlot slot = slotMap.get(slotKey);
         if (slot == null) {
             logRejected("UNKNOWN_SLOT", placement);
             return null;
@@ -86,7 +87,7 @@ public class AutoPlacementResultValidator {
             return null;
         }
 
-        if (!usedSlotKeys.add(slotUniqueKey)) {
+        if (!usedSlotKeys.add(slotKey)) {
             logRejected("DUPLICATED_SLOT", placement);
             return null;
         }
@@ -108,10 +109,6 @@ public class AutoPlacementResultValidator {
                 placement.instanceKey(), placement.slotKey(), placement.assetId(), placement.reason());
 
         return new ValidPlacement(slot.globalSlotOrder(), response);
-    }
-
-    private String slotUniqueKey(String instanceKey, String slotKey) {
-        return instanceKey + "::" + slotKey;
     }
 
     private void logRejected(String reason, AiPlacementDto placement) {
