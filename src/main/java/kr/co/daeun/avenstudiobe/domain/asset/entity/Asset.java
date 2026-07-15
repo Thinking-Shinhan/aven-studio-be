@@ -63,14 +63,15 @@ public class Asset {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    @Column(name = "is_liked")
-    private Boolean isLiked;
+    @Column(name = "is_liked", nullable = false)
+    @Builder.Default
+    private Boolean isLiked = false;
 
     public void markDeleted() {
         this.status = DELETED_STATUS;
     }
 
     public void toggleIsLiked() {
-        this.isLiked = !this.isLiked;
+        this.isLiked = !Boolean.TRUE.equals(this.isLiked);
     }
 }
