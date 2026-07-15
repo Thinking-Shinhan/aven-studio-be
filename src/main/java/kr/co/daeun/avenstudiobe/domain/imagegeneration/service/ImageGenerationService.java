@@ -68,6 +68,12 @@ public class ImageGenerationService {
             "RIGHT_THREE_QUARTER_45", "우측 45도 사선",
             "BACK_VIEW", "후면"
     );
+    private static final Map<String, String> CAMERA_ANGLE_ROLE_SUFFIXES = Map.of(
+            "EYE_LEVEL_FRONT", "FRONT",
+            "LEFT_THREE_QUARTER_45", "LEFT_45",
+            "RIGHT_THREE_QUARTER_45", "RIGHT_45",
+            "BACK_VIEW", "BACK"
+    );
     private static final Map<String, String> FRAMING_LABELS = Map.of(
             "FULL_BODY", "전신",
             "THREE_QUARTER_BODY", "3/4 전신",
@@ -851,7 +857,8 @@ public class ImageGenerationService {
 
     private GeneratedAssetMetadata buildModelCutMetadata(JsonNode userOptions, JsonNode references) {
         String framing = optionValue(userOptions, "framing");
-        String cameraAngle = optionLabel(userOptions, "cameraAngle", CAMERA_ANGLE_LABELS);
+        String cameraAngleValue = optionValue(userOptions, "cameraAngle");
+        String cameraAngle = cameraAngleValue == null ? null : CAMERA_ANGLE_LABELS.get(cameraAngleValue);
         String framingLabel = framing == null ? null : FRAMING_LABELS.get(framing);
         String colorTemperature = optionLabel(userOptions, "colorTemperature", COLOR_TEMPERATURE_LABELS);
         String aspectRatio = optionLabel(userOptions, "aspectRatio", ASPECT_RATIO_LABELS);
@@ -867,9 +874,25 @@ public class ImageGenerationService {
         addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
 
         return new GeneratedAssetMetadata(
-                framing != null && FRAMING_LABELS.containsKey(framing) ? framing : "GENERATED_IMAGE",
+                buildModelAssetRole(framing, cameraAngleValue),
                 String.join(" ", sentences)
         );
+    }
+
+    private String buildModelAssetRole(String framing, String cameraAngle) {
+        String validFraming = framing != null && FRAMING_LABELS.containsKey(framing) ? framing : null;
+        String angleSuffix = cameraAngle == null ? null : CAMERA_ANGLE_ROLE_SUFFIXES.get(cameraAngle);
+
+        if (validFraming != null && angleSuffix != null) {
+            return validFraming + "_" + angleSuffix;
+        }
+        if (validFraming != null) {
+            return validFraming;
+        }
+        if (angleSuffix != null) {
+            return "MODEL_" + angleSuffix;
+        }
+        return "GENERATED_IMAGE";
     }
 
     private GeneratedAssetMetadata buildProductCutMetadata(JsonNode userOptions, JsonNode references) {

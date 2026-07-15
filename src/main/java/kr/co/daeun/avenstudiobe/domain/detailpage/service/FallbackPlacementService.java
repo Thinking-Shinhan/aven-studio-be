@@ -20,6 +20,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class FallbackPlacementService {
 
+    private static final Set<String> MODEL_FRAMINGS = Set.of(
+            "FULL_BODY",
+            "THREE_QUARTER_BODY",
+            "HALF_BODY",
+            "CLOSE_UP",
+            "WIDE_MARGIN"
+    );
+
     public AutoImagePlacementRespDto place(AutoPlacementContext context) {
         return place(context, List.of());
     }
@@ -248,10 +256,7 @@ public class FallbackPlacementService {
 
         String normalized = assetRole.trim().toUpperCase();
 
-        if (normalized.contains("MODEL") || switch (normalized) {
-            case "FULL_BODY", "THREE_QUARTER_BODY", "HALF_BODY", "CLOSE_UP", "WIDE_MARGIN" -> true;
-            default -> false;
-        }) {
+        if (normalized.contains("MODEL") || isModelAssetRole(normalized)) {
             return AssetRoleGroup.MODEL;
         }
 
@@ -283,6 +288,11 @@ public class FallbackPlacementService {
         }
 
         return AssetRoleGroup.OTHER;
+    }
+
+    private boolean isModelAssetRole(String assetRole) {
+        return MODEL_FRAMINGS.stream()
+                .anyMatch(framing -> assetRole.equals(framing) || assetRole.startsWith(framing + "_"));
     }
 
     private ImagePlacementRespDto toResponse(PlacementSlot slot, AssetPlacementCandidate asset) {

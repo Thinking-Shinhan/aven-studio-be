@@ -39,7 +39,8 @@ public class AutoPlacementPromptBuilder {
             - Do not fill every slot if the available images are insufficient or unsuitable.
 
             assetRole meanings for generated images:
-            - Model-worn images: assetRole starts with a body-shot prefix (FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT), optionally followed by an angle/composition suffix (e.g. _FRONT, _BACK, _SIDE).
+            - Model-worn images: assetRole starts with a body-shot prefix (FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT), optionally followed by a camera-direction suffix (FRONT, LEFT_45, RIGHT_45, BACK).
+              Examples: FULL_BODY_FRONT, THREE_QUARTER_BODY_RIGHT_45, HALF_BODY_BACK.
             - Product overview: PRODUCT_FRONT, PRODUCT_BACK, PRODUCT_IMAGE, FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
             - Product detail: DETAIL_CLOSEUP, DETAIL.
             - Material detail: FABRIC_MACRO.
