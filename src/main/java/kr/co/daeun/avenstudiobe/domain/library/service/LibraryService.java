@@ -7,15 +7,7 @@ import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
 import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
 import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
-import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageDeleteRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetCountRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetDeleteRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryPreviewImageRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.*;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
@@ -211,7 +203,7 @@ public class LibraryService {
     @Transactional
     public LikedAssetRespDto likeAsset(Long assetId, Long brandId) {
 
-        Asset asset = assetRepository.findById(assetId)
+        Asset asset = assetRepository.findByIdAndProduct_Brand_Id(assetId, brandId)
                 .orElseThrow(LibraryAssetNotFoundException::new);
 
         asset.toggleIsLiked();
