@@ -3,6 +3,7 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
+import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
 import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
 import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
@@ -205,5 +206,16 @@ public class LibraryService {
         detailPageRepository.delete(detailPage);
 
         return new DetailPageDeleteRespDto(productId, "상세페이지가 삭제되었습니다.");
+    }
+
+    @Transactional
+    public LikedAssetRespDto likeAsset(Long assetId, Long brandId) {
+
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(LibraryAssetNotFoundException::new);
+
+        asset.toggleIsLiked();
+
+        return new LikedAssetRespDto(asset.getId(), asset.getIsLiked());
     }
 }
