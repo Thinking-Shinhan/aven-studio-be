@@ -16,6 +16,21 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
 
     List<Asset> findByProductIdOrderByIdAsc(Long productId);
 
+    @Query("""
+            select a
+            from Asset a
+            join fetch a.product p
+            where p.id in :productIds
+              and a.assetRole in :assetRoles
+              and a.type = 'IMAGE'
+              and a.status = 'USED'
+            order by a.id desc
+            """)
+    List<Asset> findProductImagesForProductList(
+            @Param("productIds") List<Long> productIds,
+            @Param("assetRoles") Set<String> assetRoles
+    );
+
     Optional<Asset> findByIdAndProduct_Brand_Id(Long id, Long brandId);
 
     @Query("""
@@ -66,7 +81,7 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
         detail_page_counts as (
             select dp.product_id,
                    count(dp.id) as detail_page_count,
-                   max(dp.created_at) as detail_page_updated_at
+                   max(dp.created_at) as detail_page_created_at
             from detail_pages dp
             group by dp.product_id
         )
