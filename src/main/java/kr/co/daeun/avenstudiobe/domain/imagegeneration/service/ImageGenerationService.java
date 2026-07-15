@@ -2,7 +2,6 @@ package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
-import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
@@ -20,6 +19,7 @@ import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import kr.co.daeun.avenstudiobe.global.exception.ImageGenerationJobNotFoundException;
 import kr.co.daeun.avenstudiobe.integration.google.GoogleAiImageProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,14 +30,12 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Base64;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -50,11 +48,14 @@ public class ImageGenerationService {
     private final AssetRepository assetRepository;
     private final ReferenceAssetRepository referenceAssetRepository;
     private final UsersRepository usersRepository;
-    private final AssetService assetService;
+    private final ImageGenerationWorker imageGenerationWorker;
     private final GcsService gcsService;
     private final GoogleAiImageProvider googleAiImageProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RestClient restClient = RestClient.create();
+
+    @Value("${image-generation.gcs-save-enabled:true}")
+    private boolean gcsSaveEnabled = true;
 
     private static final Map<String, String> COLOR_TEMPERATURE_LABELS = Map.of(
             "WARM", "웜톤",
@@ -83,10 +84,11 @@ public class ImageGenerationService {
             "RATIO_9_16", "9:16"
     );
 
-    @Value("${image-generation.gcs-save-enabled:true}")
-    private boolean gcsSaveEnabled;
-
     public ImageGenerationJobRespDto createJob(ImageGenerationJobCreateReqDto request, String loginId) {
+        if (!gcsSaveEnabled) {
+            throw new IllegalStateException("비동기 이미지 생성은 GCS 자동 저장이 필요합니다.");
+        }
+
         User user = usersRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
         Brand brand = user.getBrand();
@@ -105,35 +107,15 @@ public class ImageGenerationService {
                 generationPlan.requestedCount(),
                 generationPlan.multiShot()
         );
-        long startedAt = System.currentTimeMillis();
+        ImageGenerationWork work = toWork(
+                job,
+                product.getId(),
+                generationPlan,
+                System.currentTimeMillis()
+        );
+        imageGenerationWorker.submit(work);
 
-        try {
-            markProcessing(job.getId());
-
-            List<GeneratedOutput> generatedOutputs = generateImages(generationPlan.tasks());
-
-            if (gcsSaveEnabled) {
-                List<ImageGenerationResult> results = saveGeneratedResults(
-                        job.getId(),
-                        product.getId(),
-                        generatedOutputs,
-                        startedAt
-                );
-
-                return toResponse(job.getId(), results);
-            }
-
-            List<ImageGenerationResult> results = saveGeneratedResultsWithoutGcs(
-                    job.getId(),
-                    generatedOutputs.size(),
-                    startedAt
-            );
-
-            return toResponseWithInlineImages(job.getId(), results, generatedOutputs);
-        } catch (RuntimeException e) {
-            markFailed(job.getId(), e.getMessage(), elapsedMs(startedAt));
-            throw e;
-        }
+        return ImageGenerationJobRespDto.from(job, List.of());
     }
 
     @Transactional(readOnly = true)
@@ -141,7 +123,7 @@ public class ImageGenerationService {
         User user = usersRepository.findByLoginId(loginId)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
         ImageGenerationJob job = jobRepository.findByIdAndBrand_Id(jobId, user.getBrand().getId())
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없거나 접근 권한이 없습니다."));
+                .orElseThrow(ImageGenerationJobNotFoundException::new);
 
         List<ImageGenerationResult> results = resultRepository.findByJobIdOrderByOutputIndexAsc(jobId);
         List<ImageGenerationResultRespDto> resultDtos = toResultDtos(results);
@@ -178,110 +160,27 @@ public class ImageGenerationService {
         return jobRepository.save(job);
     }
 
-    @Transactional
-    public void markProcessing(Long jobId) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-        job.markProcessing();
-        jobRepository.save(job);
-    }
-
-    @Transactional
-    public List<ImageGenerationResult> saveGeneratedResults(
-            Long jobId,
+    private ImageGenerationWork toWork(
+            ImageGenerationJob job,
             Long productId,
-            List<GeneratedOutput> generatedOutputs,
+            GenerationPlan generationPlan,
             long startedAt
     ) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
-        List<ImageGenerationResult> results = new ArrayList<>();
-
-        for (int i = 0; i < generatedOutputs.size(); i++) {
-            GeneratedOutput generatedOutput = generatedOutputs.get(i);
-            GoogleAiImageProvider.GeneratedImage generatedImage = generatedOutput.image();
-            GeneratedAssetMetadata metadata = buildGeneratedAssetMetadata(job, generatedOutput.shotReferenceId());
-            Asset asset = assetService.saveGeneratedImage(
-                    generatedImage.bytes(),
-                    generatedImage.contentType(),
-                    product,
-                    job.getId(),
-                    generatedOutput.prompt(),
-                    metadata.assetRole(),
-                    metadata.description()
-            );
-
-            ImageGenerationResult result = ImageGenerationResult.generated(job, asset, i);
-            results.add(resultRepository.save(result));
-        }
-
-        job.markSucceeded(results.size(), elapsedMs(startedAt));
-        jobRepository.save(job);
-
-        return results;
-    }
-
-    @Transactional
-    public List<ImageGenerationResult> saveGeneratedResultsWithoutGcs(
-            Long jobId,
-            int generatedImageCount,
-            long startedAt
-    ) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-
-        List<ImageGenerationResult> results = new ArrayList<>();
-
-        for (int i = 0; i < generatedImageCount; i++) {
-            ImageGenerationResult result = ImageGenerationResult.generatedWithoutSave(job, i);
-            results.add(resultRepository.save(result));
-        }
-
-        job.markSucceeded(results.size(), elapsedMs(startedAt));
-        jobRepository.save(job);
-
-        return results;
-    }
-
-    @Transactional
-    public void markFailed(Long jobId, String errorMessage, int latencyMs) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-        job.markFailed(errorMessage, latencyMs);
-        jobRepository.save(job);
-    }
-
-    private List<GeneratedOutput> generateImages(List<GenerationTask> tasks) {
-        List<CompletableFuture<GeneratedOutput>> futures = tasks.stream()
-                .map(task -> CompletableFuture.supplyAsync(() -> new GeneratedOutput(
-                        googleAiImageProvider.generate(
-                                task.prompt(),
-                                toProviderReferenceImages(task.referenceAssets())
-                        ),
-                        task.prompt(),
-                        task.shotReferenceId()
-                )))
+        List<ImageGenerationWork.Task> tasks = IntStream.range(0, generationPlan.tasks().size())
+                .mapToObj(outputIndex -> {
+                    GenerationTask task = generationPlan.tasks().get(outputIndex);
+                    GeneratedAssetMetadata metadata = buildGeneratedAssetMetadata(job, task.shotReferenceId());
+                    return new ImageGenerationWork.Task(
+                            outputIndex,
+                            task.prompt(),
+                            toProviderReferenceImages(task.referenceAssets()),
+                            metadata.assetRole(),
+                            metadata.description()
+                    );
+                })
                 .toList();
 
-        return futures.stream()
-                .map(this::joinGeneratedOutput)
-                .toList();
-    }
-
-    private GeneratedOutput joinGeneratedOutput(
-            CompletableFuture<GeneratedOutput> future
-    ) {
-        try {
-            return future.join();
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            throw e;
-        }
+        return new ImageGenerationWork(job.getId(), productId, startedAt, tasks);
     }
 
     private BrandMood findActiveBrandMood(Long brandId) {
@@ -912,32 +811,6 @@ public class ImageGenerationService {
                 .toList();
     }
 
-    private ImageGenerationJobRespDto toResponse(Long jobId, List<ImageGenerationResult> results) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-
-        return ImageGenerationJobRespDto.from(job, toResultDtos(results));
-    }
-
-    private ImageGenerationJobRespDto toResponseWithInlineImages(
-            Long jobId,
-            List<ImageGenerationResult> results,
-            List<GeneratedOutput> generatedOutputs
-    ) {
-        ImageGenerationJob job = jobRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("이미지 생성 Job을 찾을 수 없습니다."));
-
-        List<ImageGenerationResultRespDto> resultDtos = new ArrayList<>();
-        for (int i = 0; i < results.size(); i++) {
-            GoogleAiImageProvider.GeneratedImage generatedImage = generatedOutputs.get(i).image();
-            String imageBase64 = "data:" + generatedImage.contentType() + ";base64,"
-                    + Base64.getEncoder().encodeToString(generatedImage.bytes());
-            resultDtos.add(ImageGenerationResultRespDto.from(results.get(i), null, imageBase64));
-        }
-
-        return ImageGenerationJobRespDto.from(job, resultDtos);
-    }
-
     private List<ImageGenerationResultRespDto> toResultDtos(List<ImageGenerationResult> results) {
         return results.stream()
                 .map(result -> {
@@ -1163,10 +1036,6 @@ public class ImageGenerationService {
         }
     }
 
-    private int elapsedMs(long startedAt) {
-        return Math.toIntExact(System.currentTimeMillis() - startedAt);
-    }
-
     private record ReferenceAssetInput(
             String key,
             String sourceLabel,
@@ -1187,13 +1056,6 @@ public class ImageGenerationService {
             String storedPrompt,
             int requestedCount,
             boolean multiShot
-    ) {
-    }
-
-    private record GeneratedOutput(
-            GoogleAiImageProvider.GeneratedImage image,
-            String prompt,
-            Long shotReferenceId
     ) {
     }
 
