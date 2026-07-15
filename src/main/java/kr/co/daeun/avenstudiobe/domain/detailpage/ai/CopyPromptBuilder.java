@@ -47,6 +47,8 @@ public class CopyPromptBuilder {
                 - Do not include explanations, comments, markdown, or code fences.
                 - Each array item must have exactly this shape:
                   { "instanceKey": "block-001", "slotKey": "headline", "content": "Generated copy" }
+                - Every content value must be a single-line string.
+                - Do not include newline or carriage-return characters (\\n or \\r) inside content.
                 """;
     }
 
@@ -70,7 +72,7 @@ public class CopyPromptBuilder {
                 Do not change instanceKey or slotKey.
                 Keep copy that did not have errors as much as possible.
                 The content must be non-blank and within recommendedMaxLength.
-                Return pure JSON array only. Do not include explanations, comments, markdown, or code fences. No line breaks.
+                Return pure JSON array only. Do not include explanations, comments, markdown, or code fences.
                 """);
         payload.put("validationErrors", safeList(errors).stream()
                 .map(this::toPromptError)
