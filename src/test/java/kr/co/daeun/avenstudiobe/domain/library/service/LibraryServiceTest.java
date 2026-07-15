@@ -3,6 +3,7 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
 import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
 import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
 import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
@@ -51,23 +52,39 @@ class LibraryServiceTest {
     }
 
     @Test
-    void returnsGeneratedImageFoldersWithSignedThumbnailUrls() {
+    void returnsImageFoldersWithPreviewsCountsAndUpdatedAt() {
         LibraryImageFolderProjection folder = mock(LibraryImageFolderProjection.class);
+        LibraryPreviewImageProjection preview = mock(LibraryPreviewImageProjection.class);
+        LocalDateTime updatedAt = LocalDateTime.of(2026, 7, 15, 10, 30);
+
         when(folder.getProductId()).thenReturn(10L);
         when(folder.getProductCode()).thenReturn("AVN-TS-001");
         when(folder.getProductName()).thenReturn("카라넥 반팔 폴로 셔츠");
         when(folder.getCategory()).thenReturn("상의");
-        when(folder.getAssetCount()).thenReturn(8L);
-        when(folder.getThumbnailAssetId()).thenReturn(207L);
-        when(folder.getThumbnailObjectName()).thenReturn("generated/10/20/image.png");
+        when(folder.getModelCutCount()).thenReturn(8L);
+        when(folder.getProductCutCount()).thenReturn(4L);
+        when(folder.getDetailPageCount()).thenReturn(1L);
+        when(folder.getUpdatedAt()).thenReturn(updatedAt);
+
+        when(preview.getProductId()).thenReturn(10L);
+        when(preview.getAssetId()).thenReturn(207L);
+        when(preview.getObjectName()).thenReturn("generated/10/20/image.png");
+
         when(assetRepository.findLibraryImageFolders(1L, "상의")).thenReturn(List.of(folder));
+        when(assetRepository.findLibraryPreviewImages(List.of(10L))).thenReturn(List.of(preview));
         when(gcsService.generateSignedUrl("generated/10/20/image.png")).thenReturn("signed-url");
 
         ImageFolderListRespDto response = libraryService.getImageFolders(1L, "  상의  ");
 
         assertEquals(1, response.imageFolders().size());
-        assertEquals(8L, response.imageFolders().get(0).assetCount());
-        assertEquals("signed-url", response.imageFolders().get(0).thumbnailUrl());
+        var imageFolder = response.imageFolders().get(0);
+        assertEquals(8L, imageFolder.counts().modelCut());
+        assertEquals(4L, imageFolder.counts().productCut());
+        assertEquals(1L, imageFolder.counts().detailPage());
+        assertEquals(13L, imageFolder.counts().total());
+        assertEquals(207L, imageFolder.previewImages().get(0).assetId());
+        assertEquals("signed-url", imageFolder.previewImages().get(0).imageUrl());
+        assertEquals(updatedAt, imageFolder.updatedAt());
     }
 
     @Test
