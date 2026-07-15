@@ -4,6 +4,7 @@ public record AssetPlacementCandidate(
         Long assetId,
         String assetRole,
         String description,
-        String fileUrl
+        String fileUrl,
+        Boolean liked
 ) {
 }

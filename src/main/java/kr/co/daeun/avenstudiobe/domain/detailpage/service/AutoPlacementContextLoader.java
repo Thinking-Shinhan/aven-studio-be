@@ -70,7 +70,8 @@ public class AutoPlacementContextLoader {
                 asset.getId(),
                 resolveAssetRole(asset),
                 asset.getDescription(),
-                resolveAssetUrl(asset)
+                resolveAssetUrl(asset),
+                asset.getIsLiked()
         );
     }
 

@@ -87,6 +87,11 @@ public class AutoPlacementResultValidator {
             return null;
         }
 
+        if (isSizeInfoTemplate(slot.templateKey()) != isSizeInfoAsset(asset)) {
+            logRejected("SIZE_INFO_MISMATCH", placement);
+            return null;
+        }
+
         if (!usedSlotKeys.add(slotKey)) {
             logRejected("DUPLICATED_SLOT", placement);
             return null;
@@ -109,6 +114,14 @@ public class AutoPlacementResultValidator {
                 placement.instanceKey(), placement.slotKey(), placement.assetId(), placement.reason());
 
         return new ValidPlacement(slot.globalSlotOrder(), response);
+    }
+
+    private boolean isSizeInfoTemplate(String templateKey) {
+        return templateKey != null && templateKey.toLowerCase().contains("size-info");
+    }
+
+    private boolean isSizeInfoAsset(AssetPlacementCandidate asset) {
+        return "SIZE_INFO".equalsIgnoreCase(asset.assetRole());
     }
 
     private void logRejected(String reason, AiPlacementDto placement) {

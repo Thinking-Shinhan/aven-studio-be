@@ -130,7 +130,8 @@ class FallbackPlacementServiceTest {
                 assetId,
                 assetRole,
                 "description-" + assetId,
-                "https://example.com/" + assetId
+                "https://example.com/" + assetId,
+                false
         );
     }
 }

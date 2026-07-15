@@ -39,10 +39,11 @@ public class AutoPlacementPromptBuilder {
             - Do not fill every slot if the available images are insufficient or unsuitable.
 
             assetRole meanings for generated images:
-            - Model-worn images: FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT.
+            - Model-worn images: assetRole starts with a body-shot prefix (FULL_BODY, THREE_QUARTER_BODY, HALF_BODY, CLOSE_UP, WIDE_MARGIN, MODEL, MODEL_CUT), optionally followed by an angle/composition suffix (e.g. _FRONT, _BACK, _SIDE).
             - Product overview: PRODUCT_FRONT, PRODUCT_BACK, PRODUCT_IMAGE, FRONT_VIEW, THREE_QUARTER, BACK_VIEW, SIDE_VIEW, FLAT_LAY, HANGING, GHOST_MANNEQUIN, FOLDED, PRODUCT_CUT.
             - Product detail: DETAIL_CLOSEUP, DETAIL.
             - Material detail: FABRIC_MACRO.
+            - Size info: SIZE_INFO.
 
             Decision process:
             - Follow these steps in order before selecting any asset.
@@ -66,16 +67,19 @@ public class AutoPlacementPromptBuilder {
                - Then use assetRole and description to choose the best asset within that category.
                - For the first PRODUCT_OVERVIEW image, prefer a clear standalone front view.
                - Consider framing, pose, styling, and use-case variation only when comparing assets within the same assigned category.
-            
+               - Some assets have "liked": true. This is a low-priority tie-breaker only: if multiple assets within the assigned category are otherwise equally suitable, prefer the one marked liked. Never use liked to override category assignment, slot position reasoning, or assetRole/description suitability.
+
             Priority order:
             - Required page coverage
             - Relative slot position and remaining opportunities
             - Best assetRole within the required category
             - Framing or styling variation within that category
-            
+            - Liked preference, only to break ties between otherwise equally suitable candidates
+
             Do not skip directly to asset selection.
 
             Constraints:
+            - If a slot's templateKey contains "size-info", you must select an asset whose assetRole is SIZE_INFO for that slot, and never place a SIZE_INFO asset into any other slot.
             - Use only provided assetId values.
             - Use only provided instanceKey and slotKey values.
             - Do not change FILLED slots.
@@ -175,6 +179,9 @@ public class AutoPlacementPromptBuilder {
         promptAsset.put("assetId", asset.assetId());
         promptAsset.put("assetRole", asset.assetRole());
         promptAsset.put("description", asset.description());
+        if (Boolean.TRUE.equals(asset.liked())) {
+            promptAsset.put("liked", true);
+        }
         return promptAsset;
     }
 }
