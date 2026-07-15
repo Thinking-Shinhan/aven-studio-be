@@ -63,6 +63,7 @@ public class GeneratedCopyValidator {
         Map<CopySlotKey, SlotOrder> slotOrderMap = buildTargetSlotMap(context);
 
         return safeList(copies).stream()
+                .map(this::normalizeCopy)
                 .sorted(Comparator.comparing(
                         copy -> slotOrderMap.get(toKey(copy)),
                         Comparator.nullsLast(SlotOrder::compareTo)
@@ -236,7 +237,21 @@ public class GeneratedCopyValidator {
             return List.of();
         }
 
-        return result.copies();
+        return result.copies().stream()
+                .map(this::normalizeCopy)
+                .toList();
+    }
+
+    private CopyResultDto normalizeCopy(CopyResultDto copy) {
+        if (copy == null || copy.getContent() == null) {
+            return copy;
+        }
+
+        return new CopyResultDto(
+                copy.getInstanceKey(),
+                copy.getSlotKey(),
+                copy.getContent().replaceAll("[\\r\\n]+", " ")
+        );
     }
 
     private List<CopyValidationError> safeErrors(CopyValidationResult validationResult) {
