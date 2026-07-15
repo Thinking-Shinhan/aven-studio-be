@@ -66,7 +66,7 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
         detail_page_counts as (
             select dp.product_id,
                    count(dp.id) as detail_page_count,
-                   max(dp.created_at) as detail_page_created_at
+                   max(dp.created_at) as detail_page_updated_at
             from detail_pages dp
             group by dp.product_id
         )
