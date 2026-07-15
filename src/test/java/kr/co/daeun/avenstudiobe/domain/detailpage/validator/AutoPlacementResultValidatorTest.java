@@ -56,7 +56,8 @@ class AutoPlacementResultValidatorTest {
                 assetId,
                 "PRODUCT_FRONT",
                 "description-" + assetId,
-                "https://example.com/" + assetId
+                "https://example.com/" + assetId,
+                false
         );
     }
 }

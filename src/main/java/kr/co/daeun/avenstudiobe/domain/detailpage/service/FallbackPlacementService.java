@@ -63,7 +63,8 @@ public class FallbackPlacementService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet()));
         for (PlacementSlot slot : slots) {
-            AssetPlacementCandidate asset = chooseAsset(context.assets(), usedAssetIds, placementPhase(slot));
+            AssetPlacementCandidate asset = chooseAsset(
+                    context.assets(), usedAssetIds, placementPhase(slot), slot.templateKey());
 
             if (asset == null) {
                 unfilledSlots.add(slot);
@@ -107,7 +108,8 @@ public class FallbackPlacementService {
                     context.assets(),
                     useCounts,
                     previousAssetId,
-                    placementPhase(slot)
+                    placementPhase(slot),
+                    slot.templateKey()
             );
             if (asset == null) {
                 continue;
@@ -143,15 +145,19 @@ public class FallbackPlacementService {
             List<AssetPlacementCandidate> assets,
             Map<Long, Integer> useCounts,
             Long previousAssetId,
-            PlacementPhase phase
+            PlacementPhase phase,
+            String templateKey
     ) {
+        boolean sizeInfoSlot = isSizeInfoTemplate(templateKey);
         return assets.stream()
                 .filter(asset -> asset.assetId() != null)
+                .filter(asset -> isSizeInfoAsset(asset) == sizeInfoSlot)
                 .sorted(Comparator
                         .comparingInt((AssetPlacementCandidate asset) ->
                                 Objects.equals(asset.assetId(), previousAssetId) ? 1 : 0)
                         .thenComparingInt(asset -> useCounts.getOrDefault(asset.assetId(), 0))
                         .thenComparingInt(asset -> priority(asset.assetRole(), phase))
+                        .thenComparingInt(asset -> Boolean.TRUE.equals(asset.liked()) ? 0 : 1)
                         .thenComparing(AssetPlacementCandidate::assetId))
                 .findFirst()
                 .orElse(null);
@@ -172,13 +178,26 @@ public class FallbackPlacementService {
     private AssetPlacementCandidate chooseAsset(
             List<AssetPlacementCandidate> assets,
             Set<Long> usedAssetIds,
-            PlacementPhase phase
+            PlacementPhase phase,
+            String templateKey
     ) {
+        boolean sizeInfoSlot = isSizeInfoTemplate(templateKey);
         return assets.stream()
                 .filter(asset -> asset.assetId() != null && !usedAssetIds.contains(asset.assetId()))
-                .sorted(Comparator.comparingInt(asset -> priority(asset.assetRole(), phase)))
+                .filter(asset -> isSizeInfoAsset(asset) == sizeInfoSlot)
+                .sorted(Comparator
+                        .comparingInt((AssetPlacementCandidate asset) -> priority(asset.assetRole(), phase))
+                        .thenComparingInt(asset -> Boolean.TRUE.equals(asset.liked()) ? 0 : 1))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean isSizeInfoTemplate(String templateKey) {
+        return templateKey != null && templateKey.toLowerCase().contains("size-info");
+    }
+
+    private boolean isSizeInfoAsset(AssetPlacementCandidate asset) {
+        return "SIZE_INFO".equalsIgnoreCase(asset.assetRole());
     }
 
     private PlacementPhase placementPhase(PlacementSlot slot) {
