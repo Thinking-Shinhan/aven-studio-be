@@ -63,8 +63,14 @@ public class Asset {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    @Column(name = "is_liked")
+    private Boolean isLiked;
+
     public void markDeleted() {
         this.status = DELETED_STATUS;
     }
 
+    public void toggleIsLiked() {
+        this.isLiked = !this.isLiked;
+    }
 }

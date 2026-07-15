@@ -3,23 +3,14 @@ package kr.co.daeun.avenstudiobe.domain.library.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageDeleteRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetDeleteRespDto;
-import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.*;
 import kr.co.daeun.avenstudiobe.domain.library.service.LibraryService;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.service.UsersService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -77,6 +68,14 @@ public class LibraryController {
     public ResponseEntity<DetailPageDeleteRespDto> deleteDetailPage(@PathVariable Long productId, Authentication authentication) {
         return ResponseEntity.ok(
                 libraryService.deleteDetailPage(productId, authentication)
+        );
+    }
+
+    @PatchMapping("/{assetId}/like")
+    @Operation(summary = "상품 이미지 좋아요 토글", description = "에셋 좋아요를 누르거나 취소합니다.")
+    public ResponseEntity<LikedAssetRespDto> likeAsset(@PathVariable Long assetId, Authentication authentication) {;
+        return ResponseEntity.ok(
+                libraryService.likeAsset(assetId, getBrandId(authentication))
         );
     }
 
