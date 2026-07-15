@@ -70,7 +70,7 @@ public class CopyPromptBuilder {
                 Do not change instanceKey or slotKey.
                 Keep copy that did not have errors as much as possible.
                 The content must be non-blank and within recommendedMaxLength.
-                Return pure JSON array only. Do not include explanations, comments, markdown, or code fences.
+                Return pure JSON array only. Do not include explanations, comments, markdown, or code fences. No line breaks.
                 """);
         payload.put("validationErrors", safeList(errors).stream()
                 .map(this::toPromptError)

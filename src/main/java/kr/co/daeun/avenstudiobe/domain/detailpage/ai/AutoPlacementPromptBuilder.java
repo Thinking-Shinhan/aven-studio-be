@@ -62,19 +62,20 @@ public class AutoPlacementPromptBuilder {
                - If the current EMPTY slot is the final opportunity and the page has no product-overview image, assign product front image to that slot.
                - If suitable later slots still remain, missing product-overview or detail coverage may be deferred to a later slot.
             
-            4. Select an asset only after assigning the required category.
-               - First filter candidates to the assigned category.
-               - Then use assetRole and description to choose the best asset within that category.
-               - For the first PRODUCT_OVERVIEW image, prefer a clear standalone front view.
-               - Consider framing, pose, styling, and use-case variation only when comparing assets within the same assigned category.
-               - Some assets have "liked": true. This is a low-priority tie-breaker only: if multiple assets within the assigned category are otherwise equally suitable, prefer the one marked liked. Never use liked to override category assignment, slot position reasoning, or assetRole/description suitability.
+            4. Select assets only after assigning a required category to each EMPTY slot.
+               - Filter candidates to the assigned category, then group them by exact assetRole.
+               - Treat assetRoles in FILLED slots and earlier planned placements as already represented.
+               - Prefer one suitable asset from each unrepresented assetRole before selecting additional assets from a represented assetRole.
+               - Within the same exact assetRole, prefer assets with "liked": true, then compare description, framing, pose, and styling.
+               - Liked preference must never override exact assetRole diversity.
 
             Priority order:
-            - Required page coverage
+            - Required page coverage and assigned category
             - Relative slot position and remaining opportunities
-            - Best assetRole within the required category
-            - Framing or styling variation within that category
-            - Liked preference, only to break ties between otherwise equally suitable candidates
+            - Coverage of distinct suitable exact assetRoles within the assigned category
+            - Liked preference within the same exact assetRole
+            - Description, framing, pose, and styling suitability
+            - Additional assets from an already represented assetRole
 
             Do not skip directly to asset selection.
 
