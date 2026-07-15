@@ -171,6 +171,30 @@ class ImageGenerationServiceTest {
     }
 
     @Test
+    void modelCutAssetRoleCombinesFramingAndCameraAngle() throws Throwable {
+        JsonNode references = objectMapper.createObjectNode();
+
+        assertEquals(
+                "FULL_BODY_FRONT",
+                invokeModelMetadataAssetRole(objectMapper.readTree("""
+                        {"framing":"FULL_BODY","cameraAngle":"EYE_LEVEL_FRONT"}
+                        """), references)
+        );
+        assertEquals(
+                "THREE_QUARTER_BODY_RIGHT_45",
+                invokeModelMetadataAssetRole(objectMapper.readTree("""
+                        {"framing":"THREE_QUARTER_BODY","cameraAngle":"RIGHT_THREE_QUARTER_45"}
+                        """), references)
+        );
+        assertEquals(
+                "HALF_BODY_BACK",
+                invokeModelMetadataAssetRole(objectMapper.readTree("""
+                        {"framing":"HALF_BODY","cameraAngle":"BACK_VIEW"}
+                        """), references)
+        );
+    }
+
+    @Test
     void multiShotIdsDetermineRequestedCount() throws Throwable {
         JsonNode references = objectMapper.readTree("""
                 {"shotReferenceIds":[11,12,13,14]}
@@ -371,6 +395,26 @@ class ImageGenerationServiceTest {
         Method descriptionMethod = metadata.getClass().getDeclaredMethod("description");
         descriptionMethod.setAccessible(true);
         return (String) descriptionMethod.invoke(metadata);
+    }
+
+    private String invokeModelMetadataAssetRole(JsonNode userOptions, JsonNode references) throws Throwable {
+        Method metadataMethod = ImageGenerationService.class.getDeclaredMethod(
+                "buildModelCutMetadata",
+                JsonNode.class,
+                JsonNode.class
+        );
+        metadataMethod.setAccessible(true);
+
+        Object metadata;
+        try {
+            metadata = metadataMethod.invoke(service, userOptions, references);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+
+        Method assetRoleMethod = metadata.getClass().getDeclaredMethod("assetRole");
+        assetRoleMethod.setAccessible(true);
+        return (String) assetRoleMethod.invoke(metadata);
     }
 
     @SuppressWarnings("unchecked")

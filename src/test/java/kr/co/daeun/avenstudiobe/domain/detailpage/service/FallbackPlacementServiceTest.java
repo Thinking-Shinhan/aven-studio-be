@@ -54,6 +54,22 @@ class FallbackPlacementServiceTest {
     }
 
     @Test
+    void treatsDirectionalModelRoleAsModelInsteadOfProductBack() {
+        PlacementSlot heroSlot = slot(1, "image-1", null);
+        AutoPlacementContext context = context(
+                List.of(heroSlot),
+                List.of(heroSlot),
+                List.of(asset(1L, "FULL_BODY_BACK"), asset(2L, "FRONT_VIEW"))
+        );
+
+        List<Long> placedAssetIds = service.place(context).getPlacements().stream()
+                .map(ImagePlacementRespDto::getAssetId)
+                .toList();
+
+        assertEquals(List.of(1L), placedAssetIds);
+    }
+
+    @Test
     void reusesAnExistingPageAssetWhenNoUnusedAssetRemains() {
         PlacementSlot filledSlot = slot(1, "image-1", 1L);
         PlacementSlot emptySlot = slot(2, "image-2", null);
