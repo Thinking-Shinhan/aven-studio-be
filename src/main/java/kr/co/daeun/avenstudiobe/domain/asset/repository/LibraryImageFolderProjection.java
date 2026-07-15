@@ -1,5 +1,7 @@
 package kr.co.daeun.avenstudiobe.domain.asset.repository;
 
+import java.time.LocalDateTime;
+
 public interface LibraryImageFolderProjection {
 
     Long getProductId();
@@ -10,9 +12,11 @@ public interface LibraryImageFolderProjection {
 
     String getCategory();
 
-    Long getAssetCount();
+    Long getModelCutCount();
 
-    Long getThumbnailAssetId();
+    Long getProductCutCount();
 
-    String getThumbnailObjectName();
+    Long getDetailPageCount();
+
+    LocalDateTime getUpdatedAt();
 }
