@@ -219,6 +219,24 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
     }
 
+    @ExceptionHandler(ImageGenerationJobNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleImageGenerationJobNotFound(
+            ImageGenerationJobNotFoundException e
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(ImageGenerationQueueFullException.class)
+    public ResponseEntity<ErrorResponse> handleImageGenerationQueueFull(
+            ImageGenerationQueueFullException e
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of("GENERATION_QUEUE_FULL", e.getMessage()));
+    }
+
     @ExceptionHandler({LibraryFolderNotFoundException.class, LibraryAssetNotFoundException.class, DetailPageNotFoundException.class})
     public ResponseEntity<ErrorResponse> handleLibraryNotFound(RuntimeException e) {
         return ResponseEntity

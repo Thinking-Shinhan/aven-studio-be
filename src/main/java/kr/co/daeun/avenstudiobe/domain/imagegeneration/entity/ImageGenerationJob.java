@@ -129,6 +129,11 @@ public class ImageGenerationJob {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public void incrementOutputCount() {
+        this.outputCount = this.outputCount + 1;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public void markFailed(String errorMessage, int latencyMs) {
         this.status = "FAILED";
         this.errorMessage = errorMessage;

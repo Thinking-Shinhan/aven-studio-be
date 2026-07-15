@@ -24,7 +24,7 @@ public class ImageGenerationController {
     ) {
         ImageGenerationJobRespDto response = imageGenerationService.createJob(request, authentication.getName());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @GetMapping("/{jobId}")

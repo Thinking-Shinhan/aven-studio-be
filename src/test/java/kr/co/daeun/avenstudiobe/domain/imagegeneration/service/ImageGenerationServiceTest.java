@@ -1,7 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.imagegeneration.service;
 
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
-import kr.co.daeun.avenstudiobe.domain.asset.service.AssetService;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.brandmood.entity.BrandMood;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
@@ -41,7 +40,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -232,7 +230,7 @@ class ImageGenerationServiceTest {
         AssetRepository assetRepository = mock(AssetRepository.class);
         ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
         UsersRepository usersRepository = mock(UsersRepository.class);
-        AssetService assetService = mock(AssetService.class);
+        ImageGenerationWorker imageGenerationWorker = mock(ImageGenerationWorker.class);
         GcsService gcsService = mock(GcsService.class);
         GoogleAiImageProvider imageProvider = mock(GoogleAiImageProvider.class);
 
@@ -244,12 +242,10 @@ class ImageGenerationServiceTest {
                 assetRepository,
                 referenceAssetRepository,
                 usersRepository,
-                assetService,
+                imageGenerationWorker,
                 gcsService,
                 imageProvider
         );
-        setField(multiShotService, "gcsSaveEnabled", false);
-
         Brand brand = mock(Brand.class);
         User user = mock(User.class);
         Product product = mock(Product.class);
@@ -277,10 +273,6 @@ class ImageGenerationServiceTest {
         when(gcsService.download(anyString())).thenAnswer(invocation ->
                 invocation.<String>getArgument(0).getBytes()
         );
-        when(imageProvider.generate(anyString(), any())).thenReturn(
-                new GoogleAiImageProvider.GeneratedImage(new byte[]{1, 2, 3}, "image/png")
-        );
-
         AtomicReference<ImageGenerationJob> savedJob = new AtomicReference<>();
         when(jobRepository.save(any(ImageGenerationJob.class))).thenAnswer(invocation -> {
             ImageGenerationJob job = invocation.getArgument(0);
@@ -290,9 +282,6 @@ class ImageGenerationServiceTest {
             }
             return job;
         });
-        when(jobRepository.findById(100L)).thenAnswer(invocation -> Optional.of(savedJob.get()));
-        when(resultRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-
         ImageGenerationJobCreateReqDto request = new ImageGenerationJobCreateReqDto();
         request.setProductId(1L);
         request.setCutType("PRODUCT_CUT");
@@ -303,14 +292,15 @@ class ImageGenerationServiceTest {
 
         ImageGenerationJobRespDto response = multiShotService.createJob(request, "tester");
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<GoogleAiImageProvider.ReferenceImage>> referenceCaptor =
-                ArgumentCaptor.forClass(List.class);
-        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(imageProvider, times(4)).generate(promptCaptor.capture(), referenceCaptor.capture());
+        ArgumentCaptor<ImageGenerationWork> workCaptor = ArgumentCaptor.forClass(ImageGenerationWork.class);
+        verify(imageGenerationWorker).submit(workCaptor.capture());
 
-        Set<String> prompts = Set.copyOf(promptCaptor.getAllValues());
-        Set<String> referencePayloads = referenceCaptor.getAllValues().stream()
+        ImageGenerationWork work = workCaptor.getValue();
+        Set<String> prompts = work.tasks().stream()
+                .map(ImageGenerationWork.Task::prompt)
+                .collect(Collectors.toSet());
+        Set<String> referencePayloads = work.tasks().stream()
+                .map(ImageGenerationWork.Task::referenceImages)
                 .peek(references -> assertEquals(1, references.size()))
                 .map(references -> references.get(0))
                 .peek(reference -> assertEquals("shotReferenceImage", reference.key()))
@@ -327,7 +317,9 @@ class ImageGenerationServiceTest {
                 "reference/14.png"
         ), referencePayloads);
         assertEquals(4, response.getRequestedCount());
-        assertEquals(4, response.getOutputCount());
+        assertEquals(0, response.getOutputCount());
+        assertEquals("PENDING", response.getStatus());
+        assertEquals(5, response.getProgressPercent());
     }
 
     private void invokeMetadataBuilder(String methodName, JsonNode emptyJson) throws Throwable {
