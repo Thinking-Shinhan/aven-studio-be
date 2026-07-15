@@ -219,7 +219,7 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("NOT_FOUND", e.getMessage()));
     }
 
-    @ExceptionHandler({LibraryFolderNotFoundException.class, LibraryAssetNotFoundException.class})
+    @ExceptionHandler({LibraryFolderNotFoundException.class, LibraryAssetNotFoundException.class, DetailPageNotFoundException.class})
     public ResponseEntity<ErrorResponse> handleLibraryNotFound(RuntimeException e) {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
