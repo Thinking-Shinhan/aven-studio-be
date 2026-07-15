@@ -155,7 +155,7 @@ class LibraryServiceTest {
         );
         when(productService.getAccessibleProductForUpdate(10L, authentication)).thenReturn(product);
         when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
-        when(gcsService.generateSignedUrl("raw-file-url")).thenReturn("signed-url");
+        when(gcsService.generateSignedUrl("detail-pages/10/detail.pdf")).thenReturn("signed-url");
 
         DetailPageRespDto response = libraryService.getDetailPage(10L, authentication);
 

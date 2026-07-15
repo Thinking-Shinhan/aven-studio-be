@@ -3,6 +3,7 @@ package kr.co.daeun.avenstudiobe.domain.library.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageDeleteRespDto;
 import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
 import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
 import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetDeleteRespDto;
@@ -68,6 +69,14 @@ public class LibraryController {
     public ResponseEntity<DetailPageRespDto> getDetailPage(@PathVariable Long productId, Authentication authentication) {
         return ResponseEntity.ok(
                 libraryService.getDetailPage(productId, authentication)
+        );
+    }
+
+    @DeleteMapping("/image-folders/{productId}/detail-page")
+    @Operation(summary = "상품별 제작한 상세페이지 삭제", description = "선택한 상품의 상세페이지 이미지를 GCS와 라이브러리에서 삭제합니다.")
+    public ResponseEntity<DetailPageDeleteRespDto> deleteDetailPage(@PathVariable Long productId, Authentication authentication) {
+        return ResponseEntity.ok(
+                libraryService.deleteDetailPage(productId, authentication)
         );
     }
 

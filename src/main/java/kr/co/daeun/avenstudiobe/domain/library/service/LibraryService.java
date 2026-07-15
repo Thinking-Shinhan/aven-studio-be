@@ -8,6 +8,8 @@ import kr.co.daeun.avenstudiobe.domain.library.dto.*;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
+import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
+import kr.co.daeun.avenstudiobe.global.exception.DetailPageNotFoundException;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryAssetNotFoundException;
 import kr.co.daeun.avenstudiobe.global.exception.LibraryFolderNotFoundException;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
@@ -126,5 +128,18 @@ public class LibraryService {
                 .orElseGet(() ->
                         DetailPageRespDto.empty(productId)
                 );
+    }
+
+    @Transactional
+    public DetailPageDeleteRespDto deleteDetailPage(Long productId, Authentication authentication) {
+        productService.getAccessibleProduct(productId, authentication);
+
+        DetailPage detailPage = detailPageRepository.findByProductId(productId)
+                .orElseThrow(DetailPageNotFoundException::new);
+
+        gcsService.delete(detailPage.getObjectName());
+        detailPageRepository.delete(detailPage);
+
+        return new DetailPageDeleteRespDto(productId, "상세페이지가 삭제되었습니다.");
     }
 }
