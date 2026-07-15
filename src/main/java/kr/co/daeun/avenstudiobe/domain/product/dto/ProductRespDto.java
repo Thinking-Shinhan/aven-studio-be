@@ -27,8 +27,14 @@ public class ProductRespDto {
     private int price;
     @Schema(description = "상품 생성 일시", example = "2026-07-08T12:30:00")
     private LocalDateTime createdAt;
+    @Schema(description = "상품 앞면과 뒷면 이미지")
+    private ProductImagesRespDto productImages;
 
     public static ProductRespDto from(Product product) {
+        return from(product, ProductImagesRespDto.empty());
+    }
+
+    public static ProductRespDto from(Product product, ProductImagesRespDto productImages) {
         return new ProductRespDto(
                 product.getId(),
                 product.getCode(),
@@ -37,7 +43,8 @@ public class ProductRespDto {
                 product.getGender(),
                 product.getColor(),
                 product.getPrice(),
-                product.getCreatedAt()
+                product.getCreatedAt(),
+                productImages
         );
     }
 }
