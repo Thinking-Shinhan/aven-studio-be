@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -37,15 +38,16 @@ class ImageGenerationWorkerTest {
         Product product = mock(Product.class);
         Asset asset = mock(Asset.class);
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(provider.generate(anyString(), any())).thenReturn(generatedImage());
+        when(provider.generate(anyString(), any(), anyString())).thenReturn(generatedImage());
         when(assetService.saveGeneratedImage(any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()))
                 .thenReturn(asset);
         ImageGenerationWorker worker = worker(directExecutor);
 
-        worker.submit(work("first", "second"));
+        worker.submit(work("first", "second", "third", "fourth"));
 
         verify(progressService).markProcessing(10L);
-        verify(progressService, times(2)).recordGeneratedResult(anyLong(), any(), anyInt());
+        verify(provider, times(4)).generate(anyString(), any(), eq("3:4"));
+        verify(progressService, times(4)).recordGeneratedResult(anyLong(), any(), anyInt());
         verify(progressService).markSucceeded(anyLong(), anyInt());
         verify(progressService, never()).markFailed(anyLong(), anyString(), anyInt());
     }
@@ -55,7 +57,7 @@ class ImageGenerationWorkerTest {
         Product product = mock(Product.class);
         Asset asset = mock(Asset.class);
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(provider.generate(anyString(), any())).thenAnswer(invocation -> {
+        when(provider.generate(anyString(), any(), anyString())).thenAnswer(invocation -> {
             if ("second".equals(invocation.getArgument(0))) {
                 throw new IllegalStateException("provider failed");
             }
@@ -100,6 +102,7 @@ class ImageGenerationWorkerTest {
                         index,
                         prompts[index],
                         List.of(),
+                        "3:4",
                         "FULL_BODY",
                         "description"
                 ))

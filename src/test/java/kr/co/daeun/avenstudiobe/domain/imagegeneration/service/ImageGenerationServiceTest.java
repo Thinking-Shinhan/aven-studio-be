@@ -99,9 +99,124 @@ class ImageGenerationServiceTest {
         String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
 
         assertTrue(instruction.contains("색온도는 쿨톤 기반으로 유지한다"));
-        assertTrue(instruction.contains("카메라 각도는 정면으로 구성한다"));
-        assertTrue(instruction.contains("구도는 3/4 전신 구도로 구성한다"));
+        assertTrue(instruction.contains("카메라는 모델의 눈높이에서 정면에 위치한다"));
+        assertTrue(instruction.contains("사선 구도나 후면 구도로 변경하지 않는다"));
+        assertTrue(instruction.contains("머리부터 무릎 아래까지 보이게 한다"));
+        assertTrue(instruction.contains("피사체의 중심을 화면 가로·세로 중앙에 고정한다"));
         assertTrue(instruction.contains("화면 비율은 반드시 3:4로 생성한다"));
+    }
+
+    @Test
+    void allCameraAnglesUseExplicitHardConstraints() throws Exception {
+        assertCameraInstructionContains(
+                "EYE_LEVEL_FRONT",
+                "모델의 몸과 상품 앞면이 카메라를 향해야 한다"
+        );
+        assertCameraInstructionContains(
+                "LEFT_THREE_QUARTER_45",
+                "모델의 정면을 기준으로 좌측 45도 위치에 배치한다"
+        );
+        assertCameraInstructionContains(
+                "RIGHT_THREE_QUARTER_45",
+                "모델의 정면을 기준으로 우측 45도 위치에 배치한다"
+        );
+        assertCameraInstructionContains(
+                "BACK_VIEW",
+                "모델의 등과 상품 후면이 카메라를 향하는 완전한 후면 구도로 생성한다"
+        );
+    }
+
+    @Test
+    void allFramingsUseExplicitCropAndCenterConstraints() throws Exception {
+        assertFramingInstructionContains("FULL_BODY", "머리부터 발끝까지 전신이 모두 보이며 잘리지 않게 한다");
+        assertFramingInstructionContains("THREE_QUARTER_BODY", "머리부터 무릎 아래까지 보이게 한다");
+        assertFramingInstructionContains("HALF_BODY", "머리부터 허리 또는 골반 위까지 보이게 한다");
+        assertFramingInstructionContains("CLOSE_UP", "지정된 상품 디테일이 화면 중심에 크게 보이게 한다");
+        assertFramingInstructionContains("WIDE_MARGIN", "주변에 충분한 여백을 확보한다");
+    }
+
+    @Test
+    void modelCutPrioritizesUserCompositionOverPoseComposition() throws Exception {
+        String instruction = invokeSystemInstruction("MODEL_CUT");
+
+        assertTrue(instruction.contains("3. User selected cameraAngle"));
+        assertTrue(instruction.contains("4. User selected framing"));
+        assertTrue(instruction.contains("5. POSE_COMPOSITION_REFERENCE body pose structure"));
+        assertTrue(instruction.contains("always override camera direction, framing, crop range"));
+    }
+
+    @Test
+    void backViewOverridesFrontFacingPoseReference() throws Exception {
+        String userInstruction = invokeUserOptionsInstruction(
+                "MODEL_CUT",
+                objectMapper.readTree("""
+                        {"cameraAngle":"BACK_VIEW","framing":"FULL_BODY"}
+                        """)
+        );
+        String poseInstruction = invokeReferenceInstructionWithPose();
+
+        assertTrue(userInstruction.contains("완전한 후면 구도로 생성한다"));
+        assertTrue(poseInstruction.contains("Do not copy the person's facing direction from poseImage"));
+        assertTrue(poseInstruction.contains("when they conflict with user selected cameraAngle or framing"));
+    }
+
+    @Test
+    void eyeLevelFrontOverridesBackFacingPoseReference() throws Exception {
+        String userInstruction = invokeUserOptionsInstruction(
+                "MODEL_CUT",
+                objectMapper.readTree("""
+                        {"cameraAngle":"EYE_LEVEL_FRONT","framing":"FULL_BODY"}
+                        """)
+        );
+        String poseInstruction = invokeReferenceInstructionWithPose();
+
+        assertTrue(userInstruction.contains("모델의 몸과 상품 앞면이 카메라를 향해야 한다"));
+        assertTrue(poseInstruction.contains("Do not copy poseImage camera direction"));
+        assertTrue(poseInstruction.contains("Always keep the final subject centered"));
+    }
+
+    @Test
+    void everyCameraAngleAndFramingCombinationKeepsCenteredSubject() throws Exception {
+        List<String> cameraAngles = List.of(
+                "EYE_LEVEL_FRONT",
+                "LEFT_THREE_QUARTER_45",
+                "RIGHT_THREE_QUARTER_45",
+                "BACK_VIEW"
+        );
+        List<String> framings = List.of(
+                "FULL_BODY",
+                "THREE_QUARTER_BODY",
+                "HALF_BODY",
+                "CLOSE_UP",
+                "WIDE_MARGIN"
+        );
+
+        for (String cameraAngle : cameraAngles) {
+            for (String framing : framings) {
+                String instruction = invokeUserOptionsInstruction(
+                        "MODEL_CUT",
+                        objectMapper.readTree("""
+                                {"cameraAngle":"%s","framing":"%s"}
+                                """.formatted(cameraAngle, framing))
+                );
+
+                assertTrue(instruction.contains("피사체의 중심을 화면 가로·세로 중앙에 고정한다"));
+            }
+        }
+    }
+
+    @Test
+    void unsupportedAspectRatioIsRejectedBeforeGeneration() throws Throwable {
+        JsonNode userOptions = objectMapper.readTree("""
+                {"aspectRatio":"RATIO_5_7"}
+                """);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invokeAspectRatio(userOptions)
+        );
+
+        assertEquals("지원하지 않는 이미지 비율입니다: RATIO_5_7", exception.getMessage());
     }
 
     @Test
@@ -124,10 +239,10 @@ class ImageGenerationServiceTest {
     }
 
     @Test
-    void omittedUserOptionsProduceEmptyOptionsInstruction() throws Exception {
+    void omittedModelCutOptionsStillEnforceCenteredSubject() throws Exception {
         String instruction = invokeUserOptionsInstruction("MODEL_CUT", null);
 
-        assertTrue(instruction.contains("No additional user options were selected"));
+        assertTrue(instruction.contains("피사체의 중심을 화면 가로·세로 중앙에 고정한다"));
     }
 
     @Test
@@ -310,6 +425,9 @@ class ImageGenerationServiceTest {
         request.setProductId(1L);
         request.setCutType("PRODUCT_CUT");
         request.setPrompt("Generate each selected product shot.");
+        request.setUserOptionsJson(objectMapper.readTree("""
+                {"aspectRatio":"RATIO_3_4"}
+                """));
         request.setReferenceJson(objectMapper.readTree("""
                 {"shotReferenceIds":[11,12,13,14]}
                 """));
@@ -332,6 +450,7 @@ class ImageGenerationServiceTest {
                 .collect(Collectors.toSet());
 
         assertEquals(4, prompts.size());
+        assertTrue(work.tasks().stream().allMatch(task -> "3:4".equals(task.aspectRatio())));
         assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 11 (SHOT_11)")));
         assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 14 (SHOT_14)")));
         assertEquals(Set.of(
@@ -371,6 +490,65 @@ class ImageGenerationServiceTest {
         );
         method.setAccessible(true);
         return (String) method.invoke(service, cutType, userOptions);
+    }
+
+    private void assertCameraInstructionContains(String cameraAngle, String expected) throws Exception {
+        JsonNode userOptions = objectMapper.readTree("""
+                {"cameraAngle":"%s"}
+                """.formatted(cameraAngle));
+
+        String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
+
+        assertTrue(instruction.contains(expected));
+    }
+
+    private void assertFramingInstructionContains(String framing, String expected) throws Exception {
+        JsonNode userOptions = objectMapper.readTree("""
+                {"framing":"%s"}
+                """.formatted(framing));
+
+        String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
+
+        assertTrue(instruction.contains(expected));
+        assertTrue(instruction.contains("피사체의 중심을 화면 가로·세로 중앙에 고정한다"));
+    }
+
+    private String invokeAspectRatio(JsonNode userOptions) throws Throwable {
+        Method method = ImageGenerationService.class.getDeclaredMethod("resolveAspectRatio", JsonNode.class);
+        method.setAccessible(true);
+
+        try {
+            return (String) method.invoke(service, userOptions);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
+        }
+    }
+
+    private String invokeReferenceInstructionWithPose() throws Exception {
+        Class<?> referenceInputClass = Class.forName(
+                "kr.co.daeun.avenstudiobe.domain.imagegeneration.service."
+                        + "ImageGenerationService$ReferenceAssetInput"
+        );
+        var constructor = referenceInputClass.getDeclaredConstructor(
+                String.class,
+                String.class,
+                byte[].class,
+                String.class
+        );
+        constructor.setAccessible(true);
+        Object poseReference = constructor.newInstance(
+                "poseImage",
+                "pose reference",
+                new byte[]{1},
+                "image/png"
+        );
+        Method method = ImageGenerationService.class.getDeclaredMethod(
+                "buildReferenceInstruction",
+                String.class,
+                List.class
+        );
+        method.setAccessible(true);
+        return (String) method.invoke(service, "MODEL_CUT", List.of(poseReference));
     }
 
     private String invokeModelMetadataDescription(

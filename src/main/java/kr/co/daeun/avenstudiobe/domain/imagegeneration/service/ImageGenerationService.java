@@ -68,6 +68,30 @@ public class ImageGenerationService {
             "RIGHT_THREE_QUARTER_45", "우측 45도 사선",
             "BACK_VIEW", "후면"
     );
+    private static final Map<String, String> CAMERA_ANGLE_INSTRUCTIONS = Map.of(
+            "EYE_LEVEL_FRONT", """
+                    카메라는 모델의 눈높이에서 정면에 위치한다.
+                    모델의 몸과 상품 앞면이 카메라를 향해야 한다.
+                    좌우 회전을 최소화하고 상품 전면 구조가 대칭적으로 보여야 한다.
+                    사선 구도나 후면 구도로 변경하지 않는다.
+                    """.strip(),
+            "LEFT_THREE_QUARTER_45", """
+                    카메라는 모델의 정면을 기준으로 좌측 45도 위치에 배치한다.
+                    상품 앞면과 모델의 왼쪽 측면이 함께 보이는 좌측 3/4 구도로 생성한다.
+                    반대쪽 45도, 완전한 측면, 정면 또는 후면 구도로 변경하지 않는다.
+                    """.strip(),
+            "RIGHT_THREE_QUARTER_45", """
+                    카메라는 모델의 정면을 기준으로 우측 45도 위치에 배치한다.
+                    상품 앞면과 모델의 오른쪽 측면이 함께 보이는 우측 3/4 구도로 생성한다.
+                    반대쪽 45도, 완전한 측면, 정면 또는 후면 구도로 변경하지 않는다.
+                    """.strip(),
+            "BACK_VIEW", """
+                    카메라는 모델의 등 뒤 정중앙에 위치한다.
+                    모델의 등과 상품 후면이 카메라를 향하는 완전한 후면 구도로 생성한다.
+                    얼굴과 상품 앞면이 보이는 정면 또는 사선 구도로 변경하지 않는다.
+                    상품 후면의 실루엣, 봉제선과 디테일이 명확하게 보여야 한다.
+                    """.strip()
+    );
     private static final Map<String, String> CAMERA_ANGLE_ROLE_SUFFIXES = Map.of(
             "EYE_LEVEL_FRONT", "FRONT",
             "LEFT_THREE_QUARTER_45", "LEFT_45",
@@ -80,6 +104,13 @@ public class ImageGenerationService {
             "HALF_BODY", "반신",
             "CLOSE_UP", "클로즈업",
             "WIDE_MARGIN", "여백 강조"
+    );
+    private static final Map<String, String> FRAMING_INSTRUCTIONS = Map.of(
+            "FULL_BODY", "머리부터 발끝까지 전신이 모두 보이며 잘리지 않게 한다.",
+            "THREE_QUARTER_BODY", "머리부터 무릎 아래까지 보이게 한다.",
+            "HALF_BODY", "머리부터 허리 또는 골반 위까지 보이게 한다.",
+            "CLOSE_UP", "지정된 상품 디테일이 화면 중심에 크게 보이게 한다.",
+            "WIDE_MARGIN", "피사체 전체를 중앙에 배치하고 주변에 충분한 여백을 확보한다."
     );
     private static final Map<String, String> ASPECT_RATIO_LABELS = Map.of(
             "RATIO_1_1", "1:1",
@@ -180,6 +211,7 @@ public class ImageGenerationService {
                             outputIndex,
                             task.prompt(),
                             toProviderReferenceImages(task.referenceAssets()),
+                            generationPlan.aspectRatio(),
                             metadata.assetRole(),
                             metadata.description()
                     );
@@ -199,6 +231,7 @@ public class ImageGenerationService {
             BrandMood brandMood,
             Long brandId
     ) {
+        String aspectRatio = resolveAspectRatio(request.getUserOptionsJson());
         JsonNode referenceRoot = parseReferenceJson(request.getReferenceJson());
         List<Long> shotReferenceIds = extractShotReferenceIds(referenceRoot, request.getCutType());
         int requestedCount = resolveRequestedCount(request.getRequestedCount(), shotReferenceIds);
@@ -216,7 +249,7 @@ public class ImageGenerationService {
             for (int i = 0; i < requestedCount; i++) {
                 tasks.add(new GenerationTask(prompt, commonReferences, null));
             }
-            return new GenerationPlan(tasks, prompt, requestedCount, false);
+            return new GenerationPlan(tasks, prompt, requestedCount, false, aspectRatio);
         }
 
         List<GenerationTask> tasks = new ArrayList<>();
@@ -234,7 +267,7 @@ public class ImageGenerationService {
             tasks.add(new GenerationTask(prompt, List.copyOf(taskReferences), shotReferenceId));
         }
 
-        return new GenerationPlan(tasks, buildStoredPrompt(tasks), requestedCount, true);
+        return new GenerationPlan(tasks, buildStoredPrompt(tasks), requestedCount, true, aspectRatio);
     }
 
     private List<Long> extractShotReferenceIds(JsonNode referenceRoot, String cutType) {
@@ -349,21 +382,9 @@ public class ImageGenerationService {
                 "colorTemperature",
                 COLOR_TEMPERATURE_LABELS
         );
-        String cameraAngle = optionLabel(
-                userOptions,
-                "cameraAngle",
-                CAMERA_ANGLE_LABELS
-        );
-        String framing = optionLabel(
-                userOptions,
-                "framing",
-                FRAMING_LABELS
-        );
-        String aspectRatio = optionLabel(
-                userOptions,
-                "aspectRatio",
-                ASPECT_RATIO_LABELS
-        );
+        String cameraAngle = optionValue(userOptions, "cameraAngle");
+        String framing = optionValue(userOptions, "framing");
+        String aspectRatio = resolveAspectRatio(userOptions);
 
         List<String> instructions = new ArrayList<>();
         if (colorTemperature != null) {
@@ -372,11 +393,19 @@ public class ImageGenerationService {
 
         if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
             if (cameraAngle != null) {
-                instructions.add("- 카메라 각도는 " + cameraAngle + "으로 구성한다.");
+                String cameraAngleInstruction = CAMERA_ANGLE_INSTRUCTIONS.get(cameraAngle);
+                if (cameraAngleInstruction != null) {
+                    instructions.add("- " + cameraAngleInstruction.replace("\n", "\n- "));
+                }
             }
             if (framing != null) {
-                instructions.add("- 구도는 " + framing + " 구도로 구성한다.");
+                String framingInstruction = FRAMING_INSTRUCTIONS.get(framing);
+                if (framingInstruction != null) {
+                    instructions.add("- " + framingInstruction);
+                }
             }
+            instructions.add("- 피사체의 중심을 화면 가로·세로 중앙에 고정한다.");
+            instructions.add("- 포즈 레퍼런스의 카메라 방향과 크롭이 사용자 선택값과 충돌하면 cameraAngle과 framing을 우선한다.");
         }
 
         if (aspectRatio != null) {
@@ -458,13 +487,16 @@ public class ImageGenerationService {
 
                 Priority order:
                 1. GARMENT_REFERENCE product accuracy
-                2. PRIMARY outfit item accuracy
-                3. STYLING outfit item consistency
-                4. MODEL_REFERENCE identity consistency
+                2. MODEL_REFERENCE identity consistency
+                3. User selected cameraAngle
+                4. User selected framing
                 5. POSE_COMPOSITION_REFERENCE body pose structure
                 6. BACKGROUND_REFERENCE spatial mood and atmosphere
                 7. Brand mood
-                8. User selected mood options
+                8. Color temperature and additional user prompt
+
+                User selected cameraAngle and framing are hard constraints.
+                They always override camera direction, framing, crop range, and subject placement inferred from POSE_COMPOSITION_REFERENCE.
                 """;
     }
 
@@ -519,12 +551,13 @@ public class ImageGenerationService {
                 The final outfit should naturally combine the product reference item from productImages with the styling context from modelImage.
 
                 poseImage = POSE_COMPOSITION_REFERENCE.
-                poseImage is not a mood reference. It is the exact body pose and camera composition template.
+                poseImage is not a mood reference. It is a body pose reference only.
                 Reproduce the pose from poseImage as closely as possible.
                 Do not reinterpret it as a generic ecommerce pose.
-                Do not casually change arm, hand, leg, foot, shoulder, pelvis, waist, neck, head, or gaze direction.
-                Match body direction, upper body rotation, shoulder angle, pelvis angle, waist tilt, head direction, gaze direction, arm position, elbow angle, hand position, rough finger direction, leg position, knee angle, foot direction, weight shift, total silhouette, camera angle, crop range, and model position in frame as closely as possible.
-                Use poseImage only for body pose, body direction, camera angle, framing, crop range, and model placement inside the frame.
+                Use poseImage for arm, hand, leg, foot, shoulder, pelvis, weight shift, and overall body posture.
+                Do not copy poseImage camera direction, framing, crop range, subject scale, or subject position when they conflict with user selected cameraAngle or framing.
+                Do not copy the person's facing direction from poseImage as a camera-angle constraint.
+                Always keep the final subject centered horizontally and vertically in the frame.
                 Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
 
                 backgroundImage = BACKGROUND_REFERENCE.
@@ -963,6 +996,19 @@ public class ImageGenerationService {
         return value == null ? null : labels.get(value);
     }
 
+    private String resolveAspectRatio(JsonNode userOptions) {
+        String aspectRatioValue = optionValue(userOptions, "aspectRatio");
+        if (aspectRatioValue == null) {
+            return null;
+        }
+
+        String aspectRatio = ASPECT_RATIO_LABELS.get(aspectRatioValue);
+        if (aspectRatio == null) {
+            throw new IllegalArgumentException("지원하지 않는 이미지 비율입니다: " + aspectRatioValue);
+        }
+        return aspectRatio;
+    }
+
     private String optionValue(JsonNode options, String key) {
         if (options == null || options.isMissingNode() || options.isNull()) {
             return null;
@@ -1078,7 +1124,8 @@ public class ImageGenerationService {
             List<GenerationTask> tasks,
             String storedPrompt,
             int requestedCount,
-            boolean multiShot
+            boolean multiShot,
+            String aspectRatio
     ) {
     }
 

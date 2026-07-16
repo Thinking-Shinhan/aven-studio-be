@@ -13,6 +13,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,12 +34,17 @@ public class GoogleAiImageProvider {
     }
 
     public GeneratedImage generate(String prompt, List<ReferenceImage> referenceImages) {
+        return generate(prompt, referenceImages, null);
+    }
+
+    public GeneratedImage generate(
+            String prompt,
+            List<ReferenceImage> referenceImages,
+            String aspectRatio
+    ) {
         validateApiKey();
 
-        Map<String, Object> requestBody = Map.of(
-                "model", properties.getImageModel(),
-                "input", buildInput(prompt, referenceImages)
-        );
+        Map<String, Object> requestBody = buildRequestBody(prompt, referenceImages, aspectRatio);
 
         String response;
         try {
@@ -64,6 +70,26 @@ public class GoogleAiImageProvider {
         }
 
         return parseGeneratedImage(response);
+    }
+
+    Map<String, Object> buildRequestBody(
+            String prompt,
+            List<ReferenceImage> referenceImages,
+            String aspectRatio
+    ) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", properties.getImageModel());
+        requestBody.put("input", buildInput(prompt, referenceImages));
+
+        if (aspectRatio != null && !aspectRatio.isBlank()) {
+            requestBody.put("response_format", Map.of(
+                    "type", "image",
+                    "mime_type", "image/png",
+                    "aspect_ratio", aspectRatio
+            ));
+        }
+
+        return requestBody;
     }
 
     private List<Map<String, Object>> buildInput(String prompt, List<ReferenceImage> referenceImages) {

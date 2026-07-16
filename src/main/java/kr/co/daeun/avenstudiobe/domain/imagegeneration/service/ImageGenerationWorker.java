@@ -88,7 +88,8 @@ public class ImageGenerationWorker {
     private void generateAndSave(ImageGenerationWork work, ImageGenerationWork.Task task) {
         GoogleAiImageProvider.GeneratedImage generatedImage = imageProvider.generate(
                 task.prompt(),
-                task.referenceImages()
+                task.referenceImages(),
+                task.aspectRatio()
         );
         Product product = productRepository.findById(work.productId())
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
