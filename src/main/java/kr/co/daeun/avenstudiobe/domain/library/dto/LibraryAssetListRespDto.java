@@ -11,6 +11,7 @@ public record LibraryAssetListRespDto(
         String gender,
         boolean hasDetailPage,
         DetailPageRespDto.DetailPageInfo detailPage,
-        List<LibraryAssetRespDto> assets
+        List<LibraryAssetRespDto> modelCutAssets,
+        List<LibraryAssetRespDto> productCutAssets
 ) {
 }

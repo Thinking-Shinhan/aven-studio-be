@@ -2,6 +2,7 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryAssetProjection;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
 import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
@@ -88,7 +89,7 @@ class LibraryServiceTest {
     }
 
     @Test
-    void returnsOnlyGeneratedAssetsForAccessibleProduct() {
+    void separatesGeneratedAssetsByCutTypeWithoutAssetRole() {
         Product product = mock(Product.class);
         when(product.getId()).thenReturn(10L);
         when(product.getCode()).thenReturn("AVN-TS-001");
@@ -96,32 +97,36 @@ class LibraryServiceTest {
         when(product.getCategory()).thenReturn("상의");
         when(product.getColor()).thenReturn("화이트");
         when(product.getGender()).thenReturn("F");
-        Asset asset = Asset.builder()
-                .id(200L)
-                .type("GENERATED")
-                .assetRole("FULL_BODY")
-                .objectName("generated/10/20/image.png")
-                .description("모델 착장컷.")
-                .status("GENERATED")
-                .isLiked(true)
-                .createdAt(LocalDateTime.of(2026, 7, 3, 12, 40))
-                .build();
+        LibraryAssetProjection modelCut = libraryAsset(
+                200L,
+                "MODEL_CUT",
+                "generated/10/20/model.png",
+                "모델 착장컷."
+        );
+        LibraryAssetProjection productCut = libraryAsset(
+                201L,
+                "PRODUCT_CUT",
+                "generated/10/20/product.png",
+                "제품 단독컷."
+        );
         when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
-        when(assetRepository.findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
-                10L, 1L, "GENERATED", "GENERATED"
-        )).thenReturn(List.of(asset));
+        when(assetRepository.findLibraryAssets(10L, 1L)).thenReturn(List.of(modelCut, productCut));
         when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.empty());
-        when(gcsService.generateSignedUrl(asset.getObjectName())).thenReturn("signed-url");
+        when(gcsService.generateSignedUrl("generated/10/20/model.png")).thenReturn("model-signed-url");
+        when(gcsService.generateSignedUrl("generated/10/20/product.png")).thenReturn("product-signed-url");
 
         LibraryAssetListRespDto response = libraryService.getFolderAssets(1L, 10L);
 
         assertEquals("화이트", response.color());
         assertEquals("F", response.gender());
         assertFalse(response.hasDetailPage());
-        assertEquals(1, response.assets().size());
-        assertEquals("FULL_BODY", response.assets().get(0).assetRole());
-        assertEquals("signed-url", response.assets().get(0).imageUrl());
-        assertTrue(response.assets().get(0).isLiked());
+        assertEquals(1, response.modelCutAssets().size());
+        assertEquals(200L, response.modelCutAssets().get(0).assetId());
+        assertEquals("model-signed-url", response.modelCutAssets().get(0).imageUrl());
+        assertTrue(response.modelCutAssets().get(0).isLiked());
+        assertEquals(1, response.productCutAssets().size());
+        assertEquals(201L, response.productCutAssets().get(0).assetId());
+        assertEquals("product-signed-url", response.productCutAssets().get(0).imageUrl());
     }
 
     @Test
@@ -144,9 +149,7 @@ class LibraryServiceTest {
         );
 
         when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
-        when(assetRepository.findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
-                10L, 1L, "GENERATED", "GENERATED"
-        )).thenReturn(List.of());
+        when(assetRepository.findLibraryAssets(10L, 1L)).thenReturn(List.of());
         when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
         when(gcsService.generateSignedUrl("detail-pages/10/detail-page.png")).thenReturn("detail-page-signed-url");
 
@@ -166,6 +169,24 @@ class LibraryServiceTest {
                 LibraryFolderNotFoundException.class,
                 () -> libraryService.getFolderAssets(1L, 10L)
         );
+    }
+
+    private LibraryAssetProjection libraryAsset(
+            Long assetId,
+            String cutType,
+            String objectName,
+            String description
+    ) {
+        LibraryAssetProjection asset = mock(LibraryAssetProjection.class);
+        when(asset.getAssetId()).thenReturn(assetId);
+        when(asset.getType()).thenReturn("GENERATED");
+        when(asset.getObjectName()).thenReturn(objectName);
+        when(asset.getDescription()).thenReturn(description);
+        when(asset.getStatus()).thenReturn("GENERATED");
+        when(asset.getIsLiked()).thenReturn(true);
+        when(asset.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 3, 12, 40));
+        when(asset.getCutType()).thenReturn(cutType);
+        return asset;
     }
 
     @Test

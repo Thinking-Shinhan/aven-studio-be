@@ -144,11 +144,29 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
         @Param("productIds") List<Long> productIds
         );
 
-    List<Asset> findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
-            Long productId,
-            Long brandId,
-            String type,
-            String status
+    @Query(value = """
+            select a.id as "assetId",
+                   a.type as "type",
+                   a.object_name as "objectName",
+                   a.description as "description",
+                   a.status as "status",
+                   a.is_liked as "isLiked",
+                   a.created_at as "createdAt",
+                   j.cut_type as "cutType"
+            from assets a
+            join image_generation_results r
+              on r.asset_id = a.id
+            join image_generation_jobs j
+              on j.id = r.job_id
+            where a.product_id = :productId
+              and j.brand_id = :brandId
+              and a.type = 'GENERATED'
+              and a.status = 'GENERATED'
+            order by a.created_at desc, a.id desc
+            """, nativeQuery = true)
+    List<LibraryAssetProjection> findLibraryAssets(
+            @Param("productId") Long productId,
+            @Param("brandId") Long brandId
     );
 
     Optional<Asset> findByIdAndProduct_Brand_IdAndTypeAndStatus(
