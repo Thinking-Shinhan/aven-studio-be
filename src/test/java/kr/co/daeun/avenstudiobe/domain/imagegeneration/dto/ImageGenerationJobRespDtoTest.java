@@ -13,12 +13,19 @@ class ImageGenerationJobRespDtoTest {
     @Test
     void calculatesProgressFromStatusAndCompletedOutputCount() throws Exception {
         ImageGenerationJob job = job("PROCESSING", 4, 2);
+        List<ImageGenerationResultRespDto> results = List.of(
+                result(0),
+                result(1)
+        );
 
-        ImageGenerationJobRespDto response = ImageGenerationJobRespDto.from(job, List.of());
+        ImageGenerationJobRespDto response = ImageGenerationJobRespDto.from(job, results);
 
-        assertEquals(55, response.getProgressPercent());
+        assertEquals(50, response.getProgressPercent());
         assertEquals("GENERATING", response.getProgressStage());
-        assertEquals("4장 중 2장이 생성되었습니다.", response.getProgressMessage());
+        assertEquals(4, response.getProgressItems().size());
+        assertEquals("COMPLETED", response.getProgressItems().get(0).status());
+        assertEquals("이미지 1장 생성 완료", response.getProgressItems().get(0).message());
+        assertEquals("PENDING", response.getProgressItems().get(2).status());
     }
 
     @Test
@@ -29,6 +36,40 @@ class ImageGenerationJobRespDtoTest {
 
         assertEquals(100, response.getProgressPercent());
         assertEquals("COMPLETED", response.getProgressStage());
+        assertEquals("COMPLETED", response.getProgressItems().get(3).status());
+    }
+
+    @Test
+    void returnsFifteenPercentBeforeFirstImageCompletes() throws Exception {
+        ImageGenerationJob job = job("PROCESSING", 4, 0);
+
+        ImageGenerationJobRespDto response = ImageGenerationJobRespDto.from(job, List.of());
+
+        assertEquals(15, response.getProgressPercent());
+        assertEquals(4, response.getProgressItems().size());
+        assertEquals("PENDING", response.getProgressItems().get(0).status());
+    }
+
+    @Test
+    void marksIncompleteItemsAsFailedWhenJobFails() throws Exception {
+        ImageGenerationJob job = job("FAILED", 4, 1);
+
+        ImageGenerationJobRespDto response = ImageGenerationJobRespDto.from(job, List.of(result(0)));
+
+        assertEquals(25, response.getProgressPercent());
+        assertEquals("COMPLETED", response.getProgressItems().get(0).status());
+        assertEquals("FAILED", response.getProgressItems().get(1).status());
+    }
+
+    private ImageGenerationResultRespDto result(int outputIndex) {
+        return new ImageGenerationResultRespDto(
+                (long) outputIndex + 1,
+                (long) outputIndex + 1,
+                outputIndex,
+                "GENERATED",
+                "https://example.com/image.png",
+                null
+        );
     }
 
     private ImageGenerationJob job(String status, int requestedCount, int outputCount) throws Exception {
