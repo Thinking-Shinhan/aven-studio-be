@@ -110,16 +110,15 @@ public class GoogleAiImageProvider {
                 "parts", buildParts(prompt, referenceImages, finalInstruction)
         )));
 
-        Map<String, Object> generationConfig = new LinkedHashMap<>();
-        generationConfig.put("responseModalities", List.of("IMAGE"));
         if (aspectRatio != null && !aspectRatio.isBlank()) {
+            Map<String, Object> generationConfig = new LinkedHashMap<>();
             generationConfig.put("responseFormat", Map.of(
                     "image", Map.of(
                             "aspectRatio", aspectRatio
                     )
             ));
+            requestBody.put("generationConfig", generationConfig);
         }
-        requestBody.put("generationConfig", generationConfig);
 
         return requestBody;
     }

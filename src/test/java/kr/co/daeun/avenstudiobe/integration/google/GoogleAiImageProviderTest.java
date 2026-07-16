@@ -41,24 +41,19 @@ class GoogleAiImageProviderTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> image = (Map<String, Object>) responseFormat.get("image");
 
-        assertEquals(List.of("IMAGE"), generationConfig.get("responseModalities"));
+        assertFalse(generationConfig.containsKey("responseModalities"));
         assertEquals("3:4", image.get("aspectRatio"));
     }
 
     @Test
-    void requestsImageOnlyAndOmitsResponseFormatWhenAspectRatioIsNotSelected() {
+    void omitsGenerationConfigWhenAspectRatioIsNotSelected() {
         Map<String, Object> requestBody = provider.buildRequestBody(
                 "prompt",
                 List.of(),
                 null
         );
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> generationConfig =
-                (Map<String, Object>) requestBody.get("generationConfig");
-
-        assertEquals(List.of("IMAGE"), generationConfig.get("responseModalities"));
-        assertFalse(generationConfig.containsKey("responseFormat"));
+        assertFalse(requestBody.containsKey("generationConfig"));
     }
 
     @Test
