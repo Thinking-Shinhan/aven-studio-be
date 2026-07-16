@@ -33,22 +33,32 @@ class GoogleAiImageProviderTest {
         );
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> responseFormat = (Map<String, Object>) requestBody.get("response_format");
+        Map<String, Object> generationConfig =
+                (Map<String, Object>) requestBody.get("generationConfig");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseFormat =
+                (Map<String, Object>) generationConfig.get("responseFormat");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> image = (Map<String, Object>) responseFormat.get("image");
 
-        assertEquals("image", responseFormat.get("type"));
-        assertEquals("image/png", responseFormat.get("mime_type"));
-        assertEquals("3:4", responseFormat.get("aspect_ratio"));
+        assertEquals(List.of("IMAGE"), generationConfig.get("responseModalities"));
+        assertEquals("3:4", image.get("aspectRatio"));
     }
 
     @Test
-    void omitsResponseFormatWhenAspectRatioIsNotSelected() {
+    void requestsImageOnlyAndOmitsResponseFormatWhenAspectRatioIsNotSelected() {
         Map<String, Object> requestBody = provider.buildRequestBody(
                 "prompt",
                 List.of(),
                 null
         );
 
-        assertFalse(requestBody.containsKey("response_format"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> generationConfig =
+                (Map<String, Object>) requestBody.get("generationConfig");
+
+        assertEquals(List.of("IMAGE"), generationConfig.get("responseModalities"));
+        assertFalse(generationConfig.containsKey("responseFormat"));
     }
 
     @Test
@@ -68,14 +78,18 @@ class GoogleAiImageProviderTest {
         );
 
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> input = (List<Map<String, Object>>) requestBody.get("input");
+        List<Map<String, Object>> contents =
+                (List<Map<String, Object>>) requestBody.get("contents");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> parts =
+                (List<Map<String, Object>>) contents.get(0).get("parts");
 
-        assertTrue(input.get(1).get("text").toString().contains("This image is POSE_REFERENCE"));
-        assertEquals("image", input.get(2).get("type"));
-        assertTrue(input.get(3).get("text").toString().contains("This image is MODEL_REFERENCE"));
-        assertTrue(input.get(5).get("text").toString().contains("garment front accuracy"));
-        assertTrue(input.get(7).get("text").toString().contains("garment rear accuracy"));
-        assertTrue(input.get(input.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
+        assertTrue(parts.get(1).get("text").toString().contains("This image is POSE_REFERENCE"));
+        assertTrue(parts.get(2).containsKey("inlineData"));
+        assertTrue(parts.get(3).get("text").toString().contains("This image is MODEL_REFERENCE"));
+        assertTrue(parts.get(5).get("text").toString().contains("garment front accuracy"));
+        assertTrue(parts.get(7).get("text").toString().contains("garment rear accuracy"));
+        assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
     }
 
     @Test
@@ -85,10 +99,16 @@ class GoogleAiImageProviderTest {
         ImageIO.write(source, "png", output);
         String response = """
                 {
-                  "output_image": {
-                    "mime_type": "image/png",
-                    "data": "%s"
-                  }
+                  "candidates": [{
+                    "content": {
+                      "parts": [{
+                        "inlineData": {
+                          "mimeType": "image/png",
+                          "data": "%s"
+                        }
+                      }]
+                    }
+                  }]
                 }
                 """.formatted(Base64.getEncoder().encodeToString(output.toByteArray()));
 
