@@ -23,7 +23,7 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
             where p.id in :productIds
               and a.assetRole in :assetRoles
               and a.type = 'IMAGE'
-              and a.status = 'USED'
+              and a.status in ('USED', 'ACTIVE')
             order by a.id desc
             """)
     List<Asset> findProductImagesForProductList(
