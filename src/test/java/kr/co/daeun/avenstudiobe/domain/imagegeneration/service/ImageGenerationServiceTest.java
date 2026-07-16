@@ -169,6 +169,25 @@ class ImageGenerationServiceTest {
     }
 
     @Test
+    void backViewFinalConstraintIsRepeatedAfterReferencesWithPortraitRatio() throws Exception {
+        String instruction = invokeFinalOutputInstruction(
+                "MODEL_CUT",
+                "BACK_VIEW",
+                "FULL_BODY",
+                "9:16"
+        );
+
+        assertTrue(instruction.contains("FINAL NON-NEGOTIABLE OUTPUT CONSTRAINTS"));
+        assertTrue(instruction.contains("camera must be directly behind the stationary subject"));
+        assertTrue(instruction.contains("back of the head"));
+        assertTrue(instruction.contains("face, chest, and garment front must not be visible"));
+        assertTrue(instruction.contains("PRODUCT_BACK"));
+        assertTrue(instruction.contains("complete body from the top of the head to the feet"));
+        assertTrue(instruction.contains("vertical portrait image with an exact 9:16 aspect ratio"));
+        assertTrue(instruction.contains("Do not generate a horizontal or 16:9 image"));
+    }
+
+    @Test
     void eyeLevelFrontOverridesBackFacingPoseReference() throws Exception {
         String userInstruction = invokeUserOptionsInstruction(
                 "MODEL_CUT",
@@ -464,6 +483,7 @@ class ImageGenerationServiceTest {
                 .peek(references -> assertEquals(1, references.size()))
                 .map(references -> references.get(0))
                 .peek(reference -> assertEquals("shotReferenceImage", reference.key()))
+                .peek(reference -> assertEquals("SHOT_COMPOSITION_REFERENCE", reference.role()))
                 .map(reference -> new String(reference.bytes()))
                 .collect(Collectors.toSet());
 
@@ -550,6 +570,7 @@ class ImageGenerationServiceTest {
         var constructor = referenceInputClass.getDeclaredConstructor(
                 String.class,
                 String.class,
+                String.class,
                 byte[].class,
                 String.class
         );
@@ -557,6 +578,7 @@ class ImageGenerationServiceTest {
         Object poseReference = constructor.newInstance(
                 "poseImage",
                 "pose reference",
+                "POSE_REFERENCE",
                 new byte[]{1},
                 "image/png"
         );
@@ -567,6 +589,23 @@ class ImageGenerationServiceTest {
         );
         method.setAccessible(true);
         return (String) method.invoke(service, "MODEL_CUT", List.of(poseReference));
+    }
+
+    private String invokeFinalOutputInstruction(
+            String cutType,
+            String cameraAngle,
+            String framing,
+            String aspectRatio
+    ) throws Exception {
+        Method method = ImageGenerationService.class.getDeclaredMethod(
+                "buildFinalOutputInstruction",
+                String.class,
+                String.class,
+                String.class,
+                String.class
+        );
+        method.setAccessible(true);
+        return (String) method.invoke(service, cutType, cameraAngle, framing, aspectRatio);
     }
 
     private String invokeModelMetadataDescription(

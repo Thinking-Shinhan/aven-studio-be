@@ -38,7 +38,7 @@ class ImageGenerationWorkerTest {
         Product product = mock(Product.class);
         Asset asset = mock(Asset.class);
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(provider.generate(anyString(), any(), anyString())).thenReturn(generatedImage());
+        when(provider.generate(anyString(), any(), anyString(), anyString())).thenReturn(generatedImage());
         when(assetService.saveGeneratedImage(any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()))
                 .thenReturn(asset);
         ImageGenerationWorker worker = worker(directExecutor);
@@ -46,7 +46,7 @@ class ImageGenerationWorkerTest {
         worker.submit(work("first", "second", "third", "fourth"));
 
         verify(progressService).markProcessing(10L);
-        verify(provider, times(4)).generate(anyString(), any(), eq("3:4"));
+        verify(provider, times(4)).generate(anyString(), any(), eq("3:4"), anyString());
         verify(progressService, times(4)).recordGeneratedResult(anyLong(), any(), anyInt());
         verify(progressService).markSucceeded(anyLong(), anyInt());
         verify(progressService, never()).markFailed(anyLong(), anyString(), anyInt());
@@ -57,7 +57,7 @@ class ImageGenerationWorkerTest {
         Product product = mock(Product.class);
         Asset asset = mock(Asset.class);
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(provider.generate(anyString(), any(), anyString())).thenAnswer(invocation -> {
+        when(provider.generate(anyString(), any(), anyString(), anyString())).thenAnswer(invocation -> {
             if ("second".equals(invocation.getArgument(0))) {
                 throw new IllegalStateException("provider failed");
             }
@@ -85,6 +85,43 @@ class ImageGenerationWorkerTest {
         verify(progressService).markFailed(anyLong(), anyString(), anyInt());
     }
 
+    @Test
+    void retriesOnceAndSavesOnlyMatchingAspectRatioOutput() {
+        Product product = mock(Product.class);
+        Asset asset = mock(Asset.class);
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(provider.generate(anyString(), any(), anyString(), anyString()))
+                .thenReturn(generatedImage(1344, 768), generatedImage(900, 1200));
+        when(assetService.saveGeneratedImage(any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()))
+                .thenReturn(asset);
+        ImageGenerationWorker worker = worker(directExecutor);
+
+        worker.submit(work("first"));
+
+        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
+        verify(assetService, times(1)).saveGeneratedImage(
+                any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
+        );
+        verify(progressService).recordGeneratedResult(10L, asset, 0);
+        verify(progressService).markSucceeded(anyLong(), anyInt());
+    }
+
+    @Test
+    void rejectsOutputWhenBothAspectRatioAttemptsMismatch() {
+        when(provider.generate(anyString(), any(), anyString(), anyString()))
+                .thenReturn(generatedImage(1344, 768), generatedImage(1024, 1024));
+        ImageGenerationWorker worker = worker(directExecutor);
+
+        worker.submit(work("first"));
+
+        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
+        verify(assetService, never()).saveGeneratedImage(
+                any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
+        );
+        verify(progressService, never()).recordGeneratedResult(anyLong(), any(), anyInt());
+        verify(progressService).markFailed(anyLong(), anyString(), anyInt());
+    }
+
     private ImageGenerationWorker worker(TaskExecutor jobExecutor) {
         return new ImageGenerationWorker(
                 provider,
@@ -103,6 +140,9 @@ class ImageGenerationWorkerTest {
                         prompts[index],
                         List.of(),
                         "3:4",
+                        "BACK_VIEW",
+                        "FULL_BODY",
+                        "final instruction",
                         "FULL_BODY",
                         "description"
                 ))
@@ -111,6 +151,10 @@ class ImageGenerationWorkerTest {
     }
 
     private GoogleAiImageProvider.GeneratedImage generatedImage() {
-        return new GoogleAiImageProvider.GeneratedImage(new byte[]{1, 2, 3}, "image/png");
+        return generatedImage(900, 1200);
+    }
+
+    private GoogleAiImageProvider.GeneratedImage generatedImage(int width, int height) {
+        return new GoogleAiImageProvider.GeneratedImage(new byte[]{1, 2, 3}, "image/png", width, height);
     }
 }

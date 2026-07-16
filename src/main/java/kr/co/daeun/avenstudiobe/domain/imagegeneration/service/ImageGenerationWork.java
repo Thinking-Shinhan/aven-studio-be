@@ -15,6 +15,9 @@ public record ImageGenerationWork(
             String prompt,
             List<GoogleAiImageProvider.ReferenceImage> referenceImages,
             String aspectRatio,
+            String cameraAngle,
+            String framing,
+            String finalInstruction,
             String assetRole,
             String description
     ) {
