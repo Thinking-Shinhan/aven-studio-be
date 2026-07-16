@@ -94,7 +94,7 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
                coalesce(dc.detail_page_count, 0) as "detailPageCount",
                greatest(
                    ic.image_updated_at,
-                   dc.detail_page_updated_at
+                   dc.detail_page_created_at
                ) as "updatedAt"
         from products p
         left join image_counts ic
@@ -112,7 +112,7 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
           )
         order by greatest(
                      ic.image_updated_at,
-                     dc.detail_page_updated_at
+                     dc.detail_page_created_at
                  ) desc nulls last,
                  p.id desc
         """, nativeQuery = true)
