@@ -99,8 +99,8 @@ class ImageGenerationServiceTest {
         String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
 
         assertTrue(instruction.contains("색온도는 쿨톤 기반으로 유지한다"));
-        assertTrue(instruction.contains("카메라는 모델의 눈높이에서 정면에 위치한다"));
-        assertTrue(instruction.contains("사선 구도나 후면 구도로 변경하지 않는다"));
+        assertTrue(instruction.contains("카메라를 모델의 신체 정면 앞에 배치한다"));
+        assertTrue(instruction.contains("피사체가 사선이나 후면으로 회전하지 않도록 한다"));
         assertTrue(instruction.contains("머리부터 무릎 아래까지 보이게 한다"));
         assertTrue(instruction.contains("피사체의 중심을 화면 가로·세로 중앙에 고정한다"));
         assertTrue(instruction.contains("화면 비율은 반드시 3:4로 생성한다"));
@@ -110,19 +110,19 @@ class ImageGenerationServiceTest {
     void allCameraAnglesUseExplicitHardConstraints() throws Exception {
         assertCameraInstructionContains(
                 "EYE_LEVEL_FRONT",
-                "모델의 몸과 상품 앞면이 카메라를 향해야 한다"
+                "카메라를 모델의 신체 정면 앞에 배치한다"
         );
         assertCameraInstructionContains(
                 "LEFT_THREE_QUARTER_45",
-                "모델의 정면을 기준으로 좌측 45도 위치에 배치한다"
+                "카메라만 모델의 정면 기준 좌측 45도 위치로 이동한다"
         );
         assertCameraInstructionContains(
                 "RIGHT_THREE_QUARTER_45",
-                "모델의 정면을 기준으로 우측 45도 위치에 배치한다"
+                "카메라만 모델의 정면 기준 우측 45도 위치로 이동한다"
         );
         assertCameraInstructionContains(
                 "BACK_VIEW",
-                "모델의 등과 상품 후면이 카메라를 향하는 완전한 후면 구도로 생성한다"
+                "카메라만 모델의 등 뒤 정중앙으로 이동한다"
         );
     }
 
@@ -141,8 +141,12 @@ class ImageGenerationServiceTest {
 
         assertTrue(instruction.contains("3. User selected cameraAngle"));
         assertTrue(instruction.contains("4. User selected framing"));
-        assertTrue(instruction.contains("5. POSE_COMPOSITION_REFERENCE body pose structure"));
+        assertTrue(instruction.contains("5. POSE_REFERENCE body pose structure"));
         assertTrue(instruction.contains("always override camera direction, framing, crop range"));
+        assertTrue(instruction.contains("POSE_REFERENCE and cameraAngle use different coordinate systems"));
+        assertTrue(instruction.contains("cameraAngle describes where the camera is placed around the subject"));
+        assertTrue(instruction.contains("Do not rotate the subject's head or body toward the camera"));
+        assertFalse(instruction.contains("POSE_COMPOSITION_REFERENCE is the body pose and camera composition reference"));
     }
 
     @Test
@@ -155,9 +159,13 @@ class ImageGenerationServiceTest {
         );
         String poseInstruction = invokeReferenceInstructionWithPose();
 
-        assertTrue(userInstruction.contains("완전한 후면 구도로 생성한다"));
-        assertTrue(poseInstruction.contains("Do not copy the person's facing direction from poseImage"));
-        assertTrue(poseInstruction.contains("when they conflict with user selected cameraAngle or framing"));
+        assertTrue(userInstruction.contains("카메라만 모델의 등 뒤 정중앙으로 이동한다"));
+        assertTrue(userInstruction.contains("모델의 뒷통수, 등, 상품 후면이 보여야 한다"));
+        assertTrue(userInstruction.contains("얼굴, 가슴과 상품 앞면이 보이면 안 된다"));
+        assertTrue(userInstruction.contains("어깨 너머로 바라보면 안 된다"));
+        assertTrue(userInstruction.contains("포즈 레퍼런스의 팔, 다리, 어깨, 골반과 체중 이동은 그대로 유지한다"));
+        assertTrue(poseInstruction.contains("Preserve the head-to-torso and gaze-to-torso alignment"));
+        assertTrue(poseInstruction.contains("anatomical forward direction is not the same as the camera viewing direction"));
     }
 
     @Test
@@ -170,8 +178,8 @@ class ImageGenerationServiceTest {
         );
         String poseInstruction = invokeReferenceInstructionWithPose();
 
-        assertTrue(userInstruction.contains("모델의 몸과 상품 앞면이 카메라를 향해야 한다"));
-        assertTrue(poseInstruction.contains("Do not copy poseImage camera direction"));
+        assertTrue(userInstruction.contains("카메라를 모델의 신체 정면 앞에 배치한다"));
+        assertTrue(poseInstruction.contains("Do not derive camera position, viewing direction"));
         assertTrue(poseInstruction.contains("Always keep the final subject centered"));
     }
 
@@ -270,7 +278,12 @@ class ImageGenerationServiceTest {
                 null
         );
         JsonNode userOptions = objectMapper.readTree("""
-                {"colorTemperature":"COOL","framing":"FULL_BODY"}
+                {
+                  "colorTemperature":"COOL",
+                  "cameraAngle":"BACK_VIEW",
+                  "framing":"FULL_BODY",
+                  "aspectRatio":"RATIO_1_1"
+                }
                 """);
         JsonNode references = objectMapper.readTree("""
                 {"poseReferenceId":11,"backgroundReferenceId":3}
@@ -278,8 +291,13 @@ class ImageGenerationServiceTest {
 
         String description = invokeModelMetadataDescription(metadataService, userOptions, references);
 
-        assertTrue(description.contains("포즈: 한쪽 다리를 앞으로 내딛고 상체를 자연스럽게 회전한 자세."));
-        assertTrue(description.contains("배경: 밝은 화이트 스튜디오와 부드러운 확산광으로 구성된 공간."));
+        assertTrue(description.contains("요청 카메라 각도: 후면."));
+        assertTrue(description.contains("요청 프레이밍: 전신."));
+        assertTrue(description.contains("요청 포즈(피사체 신체 기준): 한쪽 다리를 앞으로 내딛고 상체를 자연스럽게 회전한 자세."));
+        assertTrue(description.contains("포즈 설명의 방향은 피사체 몸통 기준이며 카메라 촬영 방향과 무관하다."));
+        assertTrue(description.contains("요청 색온도: 쿨톤."));
+        assertTrue(description.contains("요청 배경: 밝은 화이트 스튜디오와 부드러운 확산광으로 구성된 공간."));
+        assertTrue(description.contains("요청 비율: 1:1."));
         assertFalse(description.contains("추천 포즈 1"));
         assertFalse(description.contains("추천 배경 1"));
         assertFalse(description.contains(".."));

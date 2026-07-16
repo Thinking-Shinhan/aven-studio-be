@@ -70,26 +70,27 @@ public class ImageGenerationService {
     );
     private static final Map<String, String> CAMERA_ANGLE_INSTRUCTIONS = Map.of(
             "EYE_LEVEL_FRONT", """
-                    카메라는 모델의 눈높이에서 정면에 위치한다.
-                    모델의 몸과 상품 앞면이 카메라를 향해야 한다.
-                    좌우 회전을 최소화하고 상품 전면 구조가 대칭적으로 보여야 한다.
-                    사선 구도나 후면 구도로 변경하지 않는다.
+                    모델의 자세와 신체 방향을 유지한 상태에서 카메라를 모델의 신체 정면 앞에 배치한다.
+                    모델 얼굴과 상품 앞면이 보여야 한다.
+                    피사체가 사선이나 후면으로 회전하지 않도록 한다.
                     """.strip(),
             "LEFT_THREE_QUARTER_45", """
-                    카메라는 모델의 정면을 기준으로 좌측 45도 위치에 배치한다.
-                    상품 앞면과 모델의 왼쪽 측면이 함께 보이는 좌측 3/4 구도로 생성한다.
-                    반대쪽 45도, 완전한 측면, 정면 또는 후면 구도로 변경하지 않는다.
+                    모델의 자세와 신체 방향을 유지한 상태에서 카메라만 모델의 정면 기준 좌측 45도 위치로 이동한다.
+                    모델이 카메라를 정면으로 보기 위해 몸이나 고개를 돌리지 않도록 한다.
+                    상품 앞면과 모델의 왼쪽 측면이 함께 보여야 한다.
                     """.strip(),
             "RIGHT_THREE_QUARTER_45", """
-                    카메라는 모델의 정면을 기준으로 우측 45도 위치에 배치한다.
-                    상품 앞면과 모델의 오른쪽 측면이 함께 보이는 우측 3/4 구도로 생성한다.
-                    반대쪽 45도, 완전한 측면, 정면 또는 후면 구도로 변경하지 않는다.
+                    모델의 자세와 신체 방향을 유지한 상태에서 카메라만 모델의 정면 기준 우측 45도 위치로 이동한다.
+                    모델이 카메라를 정면으로 보기 위해 몸이나 고개를 돌리지 않도록 한다.
+                    상품 앞면과 모델의 오른쪽 측면이 함께 보여야 한다.
                     """.strip(),
             "BACK_VIEW", """
-                    카메라는 모델의 등 뒤 정중앙에 위치한다.
-                    모델의 등과 상품 후면이 카메라를 향하는 완전한 후면 구도로 생성한다.
-                    얼굴과 상품 앞면이 보이는 정면 또는 사선 구도로 변경하지 않는다.
-                    상품 후면의 실루엣, 봉제선과 디테일이 명확하게 보여야 한다.
+                    모델의 자세와 신체 방향을 유지한 상태에서 카메라만 모델의 등 뒤 정중앙으로 이동한다.
+                    모델의 신체 정면과 시선은 카메라 반대 방향을 향해야 한다.
+                    결과에는 모델의 뒷통수, 등, 상품 후면이 보여야 한다.
+                    얼굴, 가슴과 상품 앞면이 보이면 안 된다.
+                    모델이 카메라를 보기 위해 뒤돌거나 고개를 돌리거나 어깨 너머로 바라보면 안 된다.
+                    포즈 레퍼런스의 팔, 다리, 어깨, 골반과 체중 이동은 그대로 유지한다.
                     """.strip()
     );
     private static final Map<String, String> CAMERA_ANGLE_ROLE_SUFFIXES = Map.of(
@@ -468,7 +469,7 @@ public class ImageGenerationService {
                 productImages = GARMENT_REFERENCE
                 outfitItems = OUTFIT_PRODUCT_REFERENCES
                 modelImage = MODEL_REFERENCE
-                poseImage = POSE_COMPOSITION_REFERENCE
+                poseImage = POSE_REFERENCE
                 backgroundImage = BACKGROUND_REFERENCE
 
                 Never swap the role of each reference image.
@@ -477,7 +478,8 @@ public class ImageGenerationService {
                 GARMENT_REFERENCE is the product accuracy reference for the garment the final model must wear.
                 OUTFIT_PRODUCT_REFERENCES are product references selected for this generation request. Each item has its own request role and wearing part.
                 MODEL_REFERENCE is the identity reference for the final person.
-                POSE_COMPOSITION_REFERENCE is the body pose and camera composition reference.
+                POSE_REFERENCE defines the subject's body posture in the subject's local body coordinate system.
+                It does not define the camera position or viewing direction.
                 BACKGROUND_REFERENCE is the spatial mood and atmosphere reference for the final scene.
 
                 The final result must be one complete fashion ecommerce image.
@@ -490,13 +492,19 @@ public class ImageGenerationService {
                 2. MODEL_REFERENCE identity consistency
                 3. User selected cameraAngle
                 4. User selected framing
-                5. POSE_COMPOSITION_REFERENCE body pose structure
+                5. POSE_REFERENCE body pose structure
                 6. BACKGROUND_REFERENCE spatial mood and atmosphere
                 7. Brand mood
                 8. Color temperature and additional user prompt
 
                 User selected cameraAngle and framing are hard constraints.
-                They always override camera direction, framing, crop range, and subject placement inferred from POSE_COMPOSITION_REFERENCE.
+                They always override camera direction, framing, crop range, and subject placement inferred from POSE_REFERENCE.
+
+                POSE_REFERENCE and cameraAngle use different coordinate systems.
+                POSE_REFERENCE describes how the subject's head, torso, arms, and legs are positioned relative to one another.
+                cameraAngle describes where the camera is placed around the subject.
+                Do not rotate the subject's head or body toward the camera merely because the camera position changes.
+                Preserve the relative body posture from POSE_REFERENCE while moving the camera to the position specified by cameraAngle.
                 """;
     }
 
@@ -550,15 +558,16 @@ public class ImageGenerationService {
                 Do not copy the entire existing outfit from modelImage when it conflicts with productImages.
                 The final outfit should naturally combine the product reference item from productImages with the styling context from modelImage.
 
-                poseImage = POSE_COMPOSITION_REFERENCE.
-                poseImage is not a mood reference. It is a body pose reference only.
-                Reproduce the pose from poseImage as closely as possible.
-                Do not reinterpret it as a generic ecommerce pose.
-                Use poseImage for arm, hand, leg, foot, shoulder, pelvis, weight shift, and overall body posture.
-                Do not copy poseImage camera direction, framing, crop range, subject scale, or subject position when they conflict with user selected cameraAngle or framing.
-                Do not copy the person's facing direction from poseImage as a camera-angle constraint.
+                poseImage = POSE_REFERENCE.
+                POSE_REFERENCE defines posture in the subject's local body coordinate system, not in the camera coordinate system.
+                Preserve arm and hand positions, elbow angles, leg and foot positions, knee angles, shoulder and pelvis angles, torso tilt and rotation, weight shift, head-to-torso alignment, gaze-to-torso alignment, and the overall body silhouette from poseImage.
+                Preserve the head-to-torso and gaze-to-torso alignment shown in poseImage.
+                The subject's anatomical forward direction is not the same as the camera viewing direction.
+                Do not derive camera position, viewing direction, aspect ratio, crop range, subject position, or subject scale from poseImage.
+                Do not copy poseImage identity, clothing, background, color tone, or brand mood.
+                Move only the camera to the user selected cameraAngle while preserving the subject's relative posture.
+                Do not rotate the subject's head, torso, or limbs toward the camera merely because the camera moves.
                 Always keep the final subject centered horizontally and vertically in the frame.
-                Do not copy poseImage face, identity, clothing, gray 3D material, background, color tone, or brand mood.
 
                 backgroundImage = BACKGROUND_REFERENCE.
                 backgroundImage is the background mood reference. Use backgroundImage for background color, lighting feeling, spatial depth, material mood, and overall atmosphere. Do not copy people, text, logos, signs, or unnecessary objects from backgroundImage.
@@ -900,11 +909,15 @@ public class ImageGenerationService {
 
         List<String> sentences = new ArrayList<>();
         sentences.add("모델 착장컷.");
-        addSentence(sentences, joinWithSpace(cameraAngle, framingLabel, "구도"));
-        addSentence(sentences, labeledDescription("포즈", poseDescription));
-        addSentence(sentences, textWithSuffix(colorTemperature, " 색감으로 생성되었다"));
-        addSentence(sentences, labeledDescription("배경", backgroundDescription));
-        addSentence(sentences, textWithSuffix(aspectRatio, " 비율이다"));
+        addSentence(sentences, labeledDescription("요청 카메라 각도", cameraAngle));
+        addSentence(sentences, labeledDescription("요청 프레이밍", framingLabel));
+        addSentence(sentences, labeledDescription("요청 포즈(피사체 신체 기준)", poseDescription));
+        if (poseDescription != null && !poseDescription.isBlank()) {
+            addSentence(sentences, "포즈 설명의 방향은 피사체 몸통 기준이며 카메라 촬영 방향과 무관하다");
+        }
+        addSentence(sentences, labeledDescription("요청 색온도", colorTemperature));
+        addSentence(sentences, labeledDescription("요청 배경", backgroundDescription));
+        addSentence(sentences, labeledDescription("요청 비율", aspectRatio));
 
         return new GeneratedAssetMetadata(
                 buildModelAssetRole(framing, cameraAngleValue),
@@ -1050,15 +1063,6 @@ public class ImageGenerationService {
         }
 
         return value.trim().toUpperCase();
-    }
-
-    private String joinWithSpace(String first, String second, String suffix) {
-        if (first == null && second == null) {
-            return null;
-        }
-
-        String value = first == null ? second : second == null ? first : first + " " + second;
-        return value + " " + suffix.trim();
     }
 
     private String textWithSuffix(String value, String suffix) {
