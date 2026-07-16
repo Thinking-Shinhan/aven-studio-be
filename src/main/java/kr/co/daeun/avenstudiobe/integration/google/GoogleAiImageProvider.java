@@ -24,7 +24,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class GoogleAiImageProvider {
 
-    private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+    private static final String GENERATE_CONTENT_URL =
+            "https://generativelanguage.googleapis.com/v1/models/%s:generateContent";
 
     private final GoogleAiProperties properties;
     @Qualifier("googleAiRestClient")
@@ -66,7 +67,7 @@ public class GoogleAiImageProvider {
         String response;
         try {
             response = restClient.post()
-                    .uri(INTERACTIONS_URL)
+                    .uri(GENERATE_CONTENT_URL.formatted(properties.getImageModel()))
                     .header("x-goog-api-key", properties.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
@@ -104,55 +105,56 @@ public class GoogleAiImageProvider {
             String finalInstruction
     ) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", properties.getImageModel());
-        requestBody.put("input", buildInput(prompt, referenceImages, finalInstruction));
+        requestBody.put("contents", List.of(Map.of(
+                "role", "user",
+                "parts", buildParts(prompt, referenceImages, finalInstruction)
+        )));
 
+        Map<String, Object> generationConfig = new LinkedHashMap<>();
+        generationConfig.put("responseModalities", List.of("IMAGE"));
         if (aspectRatio != null && !aspectRatio.isBlank()) {
-            requestBody.put("response_format", Map.of(
-                    "type", "image",
-                    "mime_type", "image/png",
-                    "aspect_ratio", aspectRatio
+            generationConfig.put("responseFormat", Map.of(
+                    "image", Map.of(
+                            "aspectRatio", aspectRatio
+                    )
             ));
         }
+        requestBody.put("generationConfig", generationConfig);
 
         return requestBody;
     }
 
-    private List<Map<String, Object>> buildInput(
+    private List<Map<String, Object>> buildParts(
             String prompt,
             List<ReferenceImage> referenceImages,
             String finalInstruction
     ) {
-        List<Map<String, Object>> input = new ArrayList<>();
-        input.add(Map.of(
-                "type", "text",
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(Map.of(
                 "text", prompt
         ));
 
-        if (referenceImages == null || referenceImages.isEmpty()) {
-            return input;
-        }
-
-        for (ReferenceImage referenceImage : referenceImages) {
-            input.add(Map.of(
-                    "type", "text",
-                    "text", buildReferenceRoleInstruction(referenceImage)
-            ));
-            input.add(Map.of(
-                    "type", "image",
-                    "mime_type", normalizeMimeType(referenceImage.contentType()),
-                    "data", Base64.getEncoder().encodeToString(referenceImage.bytes())
-            ));
+        if (referenceImages != null) {
+            for (ReferenceImage referenceImage : referenceImages) {
+                parts.add(Map.of(
+                        "text", buildReferenceRoleInstruction(referenceImage)
+                ));
+                parts.add(Map.of(
+                        "inlineData", Map.of(
+                                "mimeType", normalizeMimeType(referenceImage.contentType()),
+                                "data", Base64.getEncoder().encodeToString(referenceImage.bytes())
+                        )
+                ));
+            }
         }
 
         if (finalInstruction != null && !finalInstruction.isBlank()) {
-            input.add(Map.of(
-                    "type", "text",
+            parts.add(Map.of(
                     "text", finalInstruction
             ));
         }
 
-        return input;
+        return parts;
     }
 
     private String buildReferenceRoleInstruction(ReferenceImage referenceImage) {
@@ -192,53 +194,29 @@ public class GoogleAiImageProvider {
     private GeneratedImage parseGeneratedImage(String response) {
         try {
             JsonNode root = objectMapper.readTree(response);
+            for (JsonNode candidate : root.path("candidates")) {
+                for (JsonNode part : candidate.path("content").path("parts")) {
+                    JsonNode inlineData = part.path("inlineData");
+                    if (inlineData.isMissingNode()) {
+                        inlineData = part.path("inline_data");
+                    }
 
-            JsonNode outputImage = root.path("output_image");
-            if (!outputImage.isMissingNode()) {
-                String data = outputImage.path("data").asText(null);
-                String mimeType = outputImage.path("mime_type").asText("image/png");
-
-                if (data != null && !data.isBlank()) {
-                    return toGeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
+                    String data = inlineData.path("data").asText(null);
+                    if (data != null && !data.isBlank()) {
+                        String mimeType = inlineData.path("mimeType")
+                                .asText(inlineData.path("mime_type").asText("image/png"));
+                        return toGeneratedImage(
+                                Base64.getDecoder().decode(data),
+                                normalizeMimeType(mimeType)
+                        );
+                    }
                 }
-            }
-
-            GeneratedImage found = findImageData(root);
-            if (found != null) {
-                return found;
             }
 
             throw new IllegalStateException("Google AI 응답에서 생성 이미지를 찾을 수 없습니다.");
         } catch (Exception e) {
             throw new IllegalStateException("Google AI 이미지 응답 파싱에 실패했습니다.", e);
         }
-    }
-
-    private GeneratedImage findImageData(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-
-        if (node.isObject()) {
-            String data = node.path("data").asText(null);
-            String mimeType = node.path("mime_type").asText(node.path("mimeType").asText("image/png"));
-            String type = node.path("type").asText("");
-
-            if (data != null && !data.isBlank() && (type.equals("image") || mimeType.startsWith("image/"))) {
-                return toGeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
-            }
-        }
-
-        if (node.isContainerNode()) {
-            for (JsonNode child : node) {
-                GeneratedImage found = findImageData(child);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-
-        return null;
     }
 
     private GeneratedImage toGeneratedImage(byte[] bytes, String contentType) {
