@@ -10,6 +10,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -42,9 +45,23 @@ public class GoogleAiImageProvider {
             List<ReferenceImage> referenceImages,
             String aspectRatio
     ) {
+        return generate(prompt, referenceImages, aspectRatio, null);
+    }
+
+    public GeneratedImage generate(
+            String prompt,
+            List<ReferenceImage> referenceImages,
+            String aspectRatio,
+            String finalInstruction
+    ) {
         validateApiKey();
 
-        Map<String, Object> requestBody = buildRequestBody(prompt, referenceImages, aspectRatio);
+        Map<String, Object> requestBody = buildRequestBody(
+                prompt,
+                referenceImages,
+                aspectRatio,
+                finalInstruction
+        );
 
         String response;
         try {
@@ -77,9 +94,18 @@ public class GoogleAiImageProvider {
             List<ReferenceImage> referenceImages,
             String aspectRatio
     ) {
+        return buildRequestBody(prompt, referenceImages, aspectRatio, null);
+    }
+
+    Map<String, Object> buildRequestBody(
+            String prompt,
+            List<ReferenceImage> referenceImages,
+            String aspectRatio,
+            String finalInstruction
+    ) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", properties.getImageModel());
-        requestBody.put("input", buildInput(prompt, referenceImages));
+        requestBody.put("input", buildInput(prompt, referenceImages, finalInstruction));
 
         if (aspectRatio != null && !aspectRatio.isBlank()) {
             requestBody.put("response_format", Map.of(
@@ -92,7 +118,11 @@ public class GoogleAiImageProvider {
         return requestBody;
     }
 
-    private List<Map<String, Object>> buildInput(String prompt, List<ReferenceImage> referenceImages) {
+    private List<Map<String, Object>> buildInput(
+            String prompt,
+            List<ReferenceImage> referenceImages,
+            String finalInstruction
+    ) {
         List<Map<String, Object>> input = new ArrayList<>();
         input.add(Map.of(
                 "type", "text",
@@ -106,7 +136,7 @@ public class GoogleAiImageProvider {
         for (ReferenceImage referenceImage : referenceImages) {
             input.add(Map.of(
                     "type", "text",
-                    "text", "Reference image key: " + referenceImage.key()
+                    "text", buildReferenceRoleInstruction(referenceImage)
             ));
             input.add(Map.of(
                     "type", "image",
@@ -115,7 +145,44 @@ public class GoogleAiImageProvider {
             ));
         }
 
+        if (finalInstruction != null && !finalInstruction.isBlank()) {
+            input.add(Map.of(
+                    "type", "text",
+                    "text", finalInstruction
+            ));
+        }
+
         return input;
+    }
+
+    private String buildReferenceRoleInstruction(ReferenceImage referenceImage) {
+        String header = "Reference image key: " + referenceImage.key()
+                + "\nReference role: " + referenceImage.role();
+
+        return switch (referenceImage.role()) {
+            case "POSE_REFERENCE" -> header + "\n" + """
+                    This image is POSE_REFERENCE.
+                    Extract only the relative arrangement of the head, torso, arms, hands, legs, and feet.
+                    Do not copy the camera position or visible front-facing viewpoint from this image.
+                    The requested cameraAngle determines which side of this unchanged pose is photographed.
+                    """.strip();
+            case "MODEL_REFERENCE" -> header + "\n" + """
+                    This image is MODEL_REFERENCE.
+                    Use it only for identity, face, body proportions, skin tone, and hair.
+                    Do not copy its camera viewpoint, body direction, clothing, or background.
+                    """.strip();
+            case "PRODUCT_FRONT" -> header + "\n"
+                    + "Use this image as the garment front accuracy reference only.";
+            case "PRODUCT_BACK" -> header + "\n"
+                    + "Use this image as the garment rear accuracy reference, including rear silhouette, seams, and details.";
+            case "GARMENT_REFERENCE" -> header + "\n"
+                    + "Use this image only for garment identity, structure, color, material, and construction accuracy.";
+            case "BACKGROUND_REFERENCE" -> header + "\n"
+                    + "Use this image only for background space, lighting, depth, material mood, and atmosphere.";
+            case "SHOT_COMPOSITION_REFERENCE" -> header + "\n"
+                    + "Use this image only for shot composition and presentation. Never copy the product shown in it.";
+            default -> header;
+        };
     }
 
     public String getImageModel() {
@@ -132,7 +199,7 @@ public class GoogleAiImageProvider {
                 String mimeType = outputImage.path("mime_type").asText("image/png");
 
                 if (data != null && !data.isBlank()) {
-                    return new GeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
+                    return toGeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
                 }
             }
 
@@ -158,7 +225,7 @@ public class GoogleAiImageProvider {
             String type = node.path("type").asText("");
 
             if (data != null && !data.isBlank() && (type.equals("image") || mimeType.startsWith("image/"))) {
-                return new GeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
+                return toGeneratedImage(Base64.getDecoder().decode(data), normalizeMimeType(mimeType));
             }
         }
 
@@ -172,6 +239,18 @@ public class GoogleAiImageProvider {
         }
 
         return null;
+    }
+
+    private GeneratedImage toGeneratedImage(byte[] bytes, String contentType) {
+        try {
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (image == null) {
+                throw new IllegalStateException("생성 이미지의 크기를 읽을 수 없습니다.");
+            }
+            return new GeneratedImage(bytes, contentType, image.getWidth(), image.getHeight());
+        } catch (Exception e) {
+            throw new IllegalStateException("생성 이미지의 크기 분석에 실패했습니다.", e);
+        }
     }
 
     private String normalizeMimeType(String mimeType) {
@@ -207,12 +286,15 @@ public class GoogleAiImageProvider {
 
     public record GeneratedImage(
             byte[] bytes,
-            String contentType
+            String contentType,
+            int width,
+            int height
     ) {
     }
 
     public record ReferenceImage(
             String key,
+            String role,
             byte[] bytes,
             String contentType
     ) {

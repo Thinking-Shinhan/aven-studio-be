@@ -121,6 +121,37 @@ public class ImageGenerationService {
             "RATIO_16_9", "16:9",
             "RATIO_9_16", "9:16"
     );
+    private static final Map<String, String> FINAL_CAMERA_INSTRUCTIONS = Map.of(
+            "EYE_LEVEL_FRONT", """
+                    The camera must be directly in front of the stationary subject at eye level.
+                    Show the face, the front of the body, and the front of the garment.
+                    Do not generate a three-quarter, side, or rear view.
+                    """.strip(),
+            "LEFT_THREE_QUARTER_45", """
+                    Keep the subject stationary and move only the camera to 45 degrees left of the subject's anatomical front.
+                    Show the garment front together with the subject's left side.
+                    Do not turn the subject to face the camera.
+                    """.strip(),
+            "RIGHT_THREE_QUARTER_45", """
+                    Keep the subject stationary and move only the camera to 45 degrees right of the subject's anatomical front.
+                    Show the garment front together with the subject's right side.
+                    Do not turn the subject to face the camera.
+                    """.strip(),
+            "BACK_VIEW", """
+                    The camera must be directly behind the stationary subject.
+                    Show the back of the head, the back of the body, and the rear side of the garment.
+                    The face, chest, and garment front must not be visible.
+                    The subject must not turn toward the camera or look over the shoulder.
+                    Treat an attached PRODUCT_BACK reference as the highest-accuracy garment reference for rear details.
+                    """.strip()
+    );
+    private static final Map<String, String> FINAL_FRAMING_INSTRUCTIONS = Map.of(
+            "FULL_BODY", "Show the complete body from the top of the head to the feet without cropping.",
+            "THREE_QUARTER_BODY", "Show the subject from the top of the head to below the knees.",
+            "HALF_BODY", "Show the subject from the top of the head to the waist or upper pelvis.",
+            "CLOSE_UP", "Use a tight close-up centered on the requested garment detail.",
+            "WIDE_MARGIN", "Show the complete subject with generous surrounding negative space."
+    );
 
     public ImageGenerationJobRespDto createJob(ImageGenerationJobCreateReqDto request, String loginId) {
         if (!gcsSaveEnabled) {
@@ -204,6 +235,15 @@ public class ImageGenerationService {
             GenerationPlan generationPlan,
             long startedAt
     ) {
+        JsonNode storedUserOptions = readStoredJson(job.getUserOptionsJson());
+        String cameraAngle = optionValue(storedUserOptions, "cameraAngle");
+        String framing = optionValue(storedUserOptions, "framing");
+        String finalInstruction = buildFinalOutputInstruction(
+                job.getCutType(),
+                cameraAngle,
+                framing,
+                generationPlan.aspectRatio()
+        );
         List<ImageGenerationWork.Task> tasks = IntStream.range(0, generationPlan.tasks().size())
                 .mapToObj(outputIndex -> {
                     GenerationTask task = generationPlan.tasks().get(outputIndex);
@@ -213,6 +253,9 @@ public class ImageGenerationService {
                             task.prompt(),
                             toProviderReferenceImages(task.referenceAssets()),
                             generationPlan.aspectRatio(),
+                            cameraAngle,
+                            framing,
+                            finalInstruction,
                             metadata.assetRole(),
                             metadata.description()
                     );
@@ -422,6 +465,55 @@ public class ImageGenerationService {
         }
 
         return "[USER SELECTED OPTIONS]\n" + String.join("\n", instructions);
+    }
+
+    private String buildFinalOutputInstruction(
+            String cutType,
+            String cameraAngle,
+            String framing,
+            String aspectRatio
+    ) {
+        List<String> sections = new ArrayList<>();
+        sections.add("[FINAL NON-NEGOTIABLE OUTPUT CONSTRAINTS]");
+
+        if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            String cameraInstruction = cameraAngle == null
+                    ? null
+                    : FINAL_CAMERA_INSTRUCTIONS.get(cameraAngle);
+            if (cameraInstruction != null) {
+                sections.add("CAMERA VIEW:\n" + cameraInstruction);
+            }
+            sections.add("""
+                    POSE:
+                    Preserve only the relative limb, joint, torso, and head-to-torso arrangement from POSE_REFERENCE.
+                    Keep the head naturally aligned with the torso.
+                    Ignore the camera viewpoint visible in POSE_REFERENCE.
+                    """.strip());
+        }
+
+        String framingInstruction = framing == null
+                ? null
+                : FINAL_FRAMING_INSTRUCTIONS.get(framing);
+        if (framingInstruction != null && !"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            sections.add("FRAMING:\n" + framingInstruction + "\nKeep the subject centered horizontally and vertically.");
+        }
+
+        if (aspectRatio != null) {
+            sections.add("OUTPUT CANVAS:\n" + buildAspectRatioInstruction(aspectRatio));
+        }
+
+        sections.add("If any visual reference conflicts with these constraints, these final constraints take priority.");
+        return String.join("\n\n", sections);
+    }
+
+    private String buildAspectRatioInstruction(String aspectRatio) {
+        return switch (aspectRatio) {
+            case "9:16" -> "Generate a vertical portrait image with an exact 9:16 aspect ratio. Do not generate a horizontal or 16:9 image.";
+            case "2:3", "3:4", "4:5" -> "Generate a vertical portrait image with an exact " + aspectRatio + " aspect ratio. Do not generate a horizontal image.";
+            case "16:9" -> "Generate a horizontal landscape image with an exact 16:9 aspect ratio. Do not generate a vertical image.";
+            case "1:1" -> "Generate a square image with an exact 1:1 aspect ratio. Do not generate a horizontal or vertical rectangle.";
+            default -> "Generate the final image with an exact " + aspectRatio + " aspect ratio.";
+        };
     }
 
     private String buildSystemInstruction(String cutType) {
@@ -700,6 +792,7 @@ public class ImageGenerationService {
         references.add(new ReferenceAssetInput(
                 key,
                 "assetId " + asset.getId(),
+                resolveReferenceRole(key, asset.getAssetRole()),
                 gcsService.download(asset.getObjectName()),
                 asset.getContentType()
         ));
@@ -726,6 +819,7 @@ public class ImageGenerationService {
         references.add(new ReferenceAssetInput(
                 key,
                 "referenceAssetId " + referenceAsset.getId() + " (" + referenceAsset.getReferenceKey() + ")",
+                resolveReferenceRole(key, null),
                 readReferenceAssetBytes(referenceAsset),
                 referenceAsset.getContentType()
         ));
@@ -826,6 +920,7 @@ public class ImageGenerationService {
                         + ", wearingPart=" + wearingPart
                         + ", productId=" + nullToText(productId)
                         + ", assetId " + asset.getId(),
+                "OUTFIT_PRODUCT_REFERENCE_" + role + "_" + wearingPart,
                 gcsService.download(asset.getObjectName()),
                 asset.getContentType()
         ));
@@ -853,10 +948,36 @@ public class ImageGenerationService {
         return referenceAssets.stream()
                 .map(referenceAsset -> new GoogleAiImageProvider.ReferenceImage(
                         referenceAsset.key(),
+                        referenceAsset.role(),
                         referenceAsset.bytes(),
                         referenceAsset.contentType()
                 ))
                 .toList();
+    }
+
+    private String resolveReferenceRole(String key, String assetRole) {
+        if (key.startsWith("productImages")) {
+            if ("PRODUCT_FRONT".equals(normalizeValue(assetRole))) {
+                return "PRODUCT_FRONT";
+            }
+            if ("PRODUCT_BACK".equals(normalizeValue(assetRole))) {
+                return "PRODUCT_BACK";
+            }
+            return "GARMENT_REFERENCE";
+        }
+        if ("modelImage".equals(key)) {
+            return "MODEL_REFERENCE";
+        }
+        if ("poseImage".equals(key)) {
+            return "POSE_REFERENCE";
+        }
+        if ("backgroundImage".equals(key)) {
+            return "BACKGROUND_REFERENCE";
+        }
+        if ("shotReferenceImage".equals(key)) {
+            return "SHOT_COMPOSITION_REFERENCE";
+        }
+        return "REFERENCE_IMAGE";
     }
 
     private List<ImageGenerationResultRespDto> toResultDtos(List<ImageGenerationResult> results) {
@@ -1112,6 +1233,7 @@ public class ImageGenerationService {
     private record ReferenceAssetInput(
             String key,
             String sourceLabel,
+            String role,
             byte[] bytes,
             String contentType
     ) {
