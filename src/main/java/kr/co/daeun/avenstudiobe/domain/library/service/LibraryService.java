@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -88,11 +89,20 @@ public class LibraryService {
                 .map(this::toLibraryAssetResponse)
                 .toList();
 
+        Optional<DetailPage> detailPage = detailPageRepository.findByProductId(productId);
+
         return new LibraryAssetListRespDto(
                 product.getId(),
                 product.getCode(),
                 product.getName(),
                 product.getCategory(),
+                product.getColor(),
+                product.getGender(),
+                detailPage.isPresent(),
+                detailPage.map(page -> DetailPageRespDto.DetailPageInfo.from(
+                        page,
+                        gcsService.generateSignedUrl(page.getObjectName())
+                )).orElse(null),
                 assets
         );
     }
@@ -160,6 +170,7 @@ public class LibraryService {
                 gcsService.generateSignedUrl(asset.getObjectName()),
                 asset.getDescription(),
                 asset.getStatus(),
+                asset.getIsLiked(),
                 asset.getCreatedAt()
         );
     }

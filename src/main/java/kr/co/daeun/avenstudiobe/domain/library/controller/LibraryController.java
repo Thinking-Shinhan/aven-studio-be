@@ -34,7 +34,10 @@ public class LibraryController {
     }
 
     @GetMapping("/image-folders/{productId}/assets")
-    @Operation(summary = "폴더별 이미지 조회", description = "선택한 상품에 자동 저장된 생성 이미지를 조회합니다.")
+    @Operation(
+            summary = "폴더별 이미지 및 상세페이지 조회",
+            description = "선택한 상품 정보, 자동 저장된 생성 이미지, 좋아요 여부와 제작된 상세페이지를 함께 조회합니다."
+    )
     public ResponseEntity<LibraryAssetListRespDto> getFolderAssets(
             @PathVariable Long productId,
             Authentication authentication

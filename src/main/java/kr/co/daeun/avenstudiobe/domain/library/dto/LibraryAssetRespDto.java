@@ -9,6 +9,7 @@ public record LibraryAssetRespDto(
         String imageUrl,
         String description,
         String status,
+        Boolean isLiked,
         LocalDateTime createdAt
 ) {
 }

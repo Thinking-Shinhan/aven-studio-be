@@ -7,6 +7,10 @@ public record LibraryAssetListRespDto(
         String productCode,
         String productName,
         String category,
+        String color,
+        String gender,
+        boolean hasDetailPage,
+        DetailPageRespDto.DetailPageInfo detailPage,
         List<LibraryAssetRespDto> assets
 ) {
 }
