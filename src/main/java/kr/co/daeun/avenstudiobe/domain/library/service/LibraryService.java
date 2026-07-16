@@ -2,6 +2,7 @@ package kr.co.daeun.avenstudiobe.domain.library.service;
 
 import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryAssetProjection;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
 import kr.co.daeun.avenstudiobe.domain.brand.entity.Brand;
 import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
@@ -78,16 +79,13 @@ public class LibraryService {
     public LibraryAssetListRespDto getFolderAssets(Long brandId, Long productId) {
         Product product = productRepository.findByIdAndBrand_Id(productId, brandId)
                 .orElseThrow(LibraryFolderNotFoundException::new);
-        List<LibraryAssetRespDto> assets = assetRepository
-                .findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
-                        productId,
-                        brandId,
-                        GENERATED_TYPE,
-                        GENERATED_STATUS
-                )
+        Map<String, List<LibraryAssetRespDto>> assetsByCutType = assetRepository
+                .findLibraryAssets(productId, brandId)
                 .stream()
-                .map(this::toLibraryAssetResponse)
-                .toList();
+                .collect(Collectors.groupingBy(
+                        LibraryAssetProjection::getCutType,
+                        Collectors.mapping(this::toLibraryAssetResponse, Collectors.toList())
+                ));
 
         Optional<DetailPage> detailPage = detailPageRepository.findByProductId(productId);
 
@@ -103,7 +101,8 @@ public class LibraryService {
                         page,
                         gcsService.generateSignedUrl(page.getObjectName())
                 )).orElse(null),
-                assets
+                assetsByCutType.getOrDefault("MODEL_CUT", List.of()),
+                assetsByCutType.getOrDefault("PRODUCT_CUT", List.of())
         );
     }
 
@@ -162,11 +161,10 @@ public class LibraryService {
         return value == null ? 0L : value;
     }
 
-    private LibraryAssetRespDto toLibraryAssetResponse(Asset asset) {
+    private LibraryAssetRespDto toLibraryAssetResponse(LibraryAssetProjection asset) {
         return new LibraryAssetRespDto(
-                asset.getId(),
+                asset.getAssetId(),
                 asset.getType(),
-                asset.getAssetRole(),
                 gcsService.generateSignedUrl(asset.getObjectName()),
                 asset.getDescription(),
                 asset.getStatus(),
