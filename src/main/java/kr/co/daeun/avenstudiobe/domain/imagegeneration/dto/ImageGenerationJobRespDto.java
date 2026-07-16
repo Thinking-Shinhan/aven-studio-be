@@ -4,7 +4,10 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ImageGenerationJob
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Set;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Data
 @AllArgsConstructor
@@ -22,6 +25,7 @@ public class ImageGenerationJobRespDto {
     private int progressPercent;
     private String progressStage;
     private String progressMessage;
+    private List<ImageGenerationProgressItemRespDto> progressItems;
     private List<ImageGenerationResultRespDto> results;
 
     public static ImageGenerationJobRespDto from(
@@ -41,6 +45,7 @@ public class ImageGenerationJobRespDto {
                 progressPercent(job),
                 progressStage(job),
                 progressMessage(job),
+                progressItems(job, results),
                 results
         );
     }
@@ -60,7 +65,10 @@ public class ImageGenerationJobRespDto {
             return 15;
         }
         int outputCount = job.getOutputCount() == null ? 0 : job.getOutputCount();
-        return Math.min(95, 15 + (int) Math.round(outputCount * 80.0 / job.getRequestedCount()));
+        if (outputCount == 0) {
+            return 15;
+        }
+        return Math.min(100, (int) Math.round(outputCount * 100.0 / job.getRequestedCount()));
     }
 
     private static String progressStage(ImageGenerationJob job) {
@@ -76,14 +84,49 @@ public class ImageGenerationJobRespDto {
     private static String progressMessage(ImageGenerationJob job) {
         return switch (job.getStatus()) {
             case "PENDING" -> "이미지 생성 작업을 준비하고 있습니다.";
-            case "PROCESSING" -> String.format(
-                    "%d장 중 %d장이 생성되었습니다.",
-                    job.getRequestedCount(),
-                    job.getOutputCount()
-            );
+            case "PROCESSING" -> "선택한 옵션을 반영해 이미지를 만들고 있어요.";
             case "SUCCEEDED" -> "이미지 생성이 완료되었습니다.";
             case "FAILED" -> "이미지 생성 중 오류가 발생했습니다.";
             default -> "이미지 생성 상태를 확인하고 있습니다.";
         };
+    }
+
+    private static List<ImageGenerationProgressItemRespDto> progressItems(
+            ImageGenerationJob job,
+            List<ImageGenerationResultRespDto> results
+    ) {
+        int requestedCount = job.getRequestedCount() == null ? 0 : job.getRequestedCount();
+        Set<Integer> completedOutputIndexes = results.stream()
+                .filter(result -> "GENERATED".equals(result.getStatus())
+                        || "GENERATED_NOT_SAVED".equals(result.getStatus()))
+                .map(ImageGenerationResultRespDto::getOutputIndex)
+                .collect(Collectors.toSet());
+
+        return IntStream.range(0, requestedCount)
+                .mapToObj(outputIndex -> progressItem(job, completedOutputIndexes, outputIndex))
+                .toList();
+    }
+
+    private static ImageGenerationProgressItemRespDto progressItem(
+            ImageGenerationJob job,
+            Set<Integer> completedOutputIndexes,
+            int outputIndex
+    ) {
+        int imageNumber = outputIndex + 1;
+        if (completedOutputIndexes.contains(outputIndex) || "SUCCEEDED".equals(job.getStatus())) {
+            return new ImageGenerationProgressItemRespDto(
+                    outputIndex,
+                    "COMPLETED",
+                    String.format("이미지 %d장 생성 완료", imageNumber)
+            );
+        }
+        if ("FAILED".equals(job.getStatus())) {
+            return new ImageGenerationProgressItemRespDto(
+                    outputIndex,
+                    "FAILED",
+                    String.format("이미지 %d장 생성 실패", imageNumber)
+            );
+        }
+        return new ImageGenerationProgressItemRespDto(outputIndex, "PENDING", null);
     }
 }
