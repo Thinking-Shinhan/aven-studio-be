@@ -94,6 +94,8 @@ class LibraryServiceTest {
         when(product.getCode()).thenReturn("AVN-TS-001");
         when(product.getName()).thenReturn("카라넥 반팔 폴로 셔츠");
         when(product.getCategory()).thenReturn("상의");
+        when(product.getColor()).thenReturn("화이트");
+        when(product.getGender()).thenReturn("F");
         Asset asset = Asset.builder()
                 .id(200L)
                 .type("GENERATED")
@@ -101,19 +103,59 @@ class LibraryServiceTest {
                 .objectName("generated/10/20/image.png")
                 .description("모델 착장컷.")
                 .status("GENERATED")
+                .isLiked(true)
                 .createdAt(LocalDateTime.of(2026, 7, 3, 12, 40))
                 .build();
         when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
         when(assetRepository.findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
                 10L, 1L, "GENERATED", "GENERATED"
         )).thenReturn(List.of(asset));
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.empty());
         when(gcsService.generateSignedUrl(asset.getObjectName())).thenReturn("signed-url");
 
         LibraryAssetListRespDto response = libraryService.getFolderAssets(1L, 10L);
 
+        assertEquals("화이트", response.color());
+        assertEquals("F", response.gender());
+        assertFalse(response.hasDetailPage());
         assertEquals(1, response.assets().size());
         assertEquals("FULL_BODY", response.assets().get(0).assetRole());
         assertEquals("signed-url", response.assets().get(0).imageUrl());
+        assertTrue(response.assets().get(0).isLiked());
+    }
+
+    @Test
+    void returnsDetailPageTogetherWithFolderAssets() {
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(10L);
+        when(product.getCode()).thenReturn("AVN-TS-001");
+        when(product.getName()).thenReturn("카라넥 반팔 폴로 셔츠");
+        when(product.getCategory()).thenReturn("상의");
+        when(product.getColor()).thenReturn("화이트");
+        when(product.getGender()).thenReturn("F");
+
+        DetailPage detailPage = DetailPage.create(
+                product,
+                "EXPORTED",
+                "raw-file-url",
+                "detail-pages/10/detail-page.png",
+                "detail-page.png",
+                1024L
+        );
+
+        when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
+        when(assetRepository.findByProduct_IdAndProduct_Brand_IdAndTypeAndStatusOrderByCreatedAtDescIdDesc(
+                10L, 1L, "GENERATED", "GENERATED"
+        )).thenReturn(List.of());
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
+        when(gcsService.generateSignedUrl("detail-pages/10/detail-page.png")).thenReturn("detail-page-signed-url");
+
+        LibraryAssetListRespDto response = libraryService.getFolderAssets(1L, 10L);
+
+        assertTrue(response.hasDetailPage());
+        assertEquals("EXPORTED", response.detailPage().getStatus());
+        assertEquals("detail-page-signed-url", response.detailPage().getFileUrl());
+        assertEquals("detail-page.png", response.detailPage().getFileName());
     }
 
     @Test
