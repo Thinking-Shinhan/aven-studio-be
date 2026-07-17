@@ -12,6 +12,8 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -80,12 +82,68 @@ public class ImageGenerationWorker {
                 progressService.markSucceeded(work.jobId(), elapsedMs(work));
             } else {
                 failures.forEach(error -> log.error("이미지 생성 작업 일부 실패: jobId={}", work.jobId(), error));
-                progressService.markFailed(work.jobId(), GENERATION_FAILED_MESSAGE, elapsedMs(work));
+                progressService.markFailed(
+                        work.jobId(),
+                        resolveFailureMessage(failures),
+                        elapsedMs(work)
+                );
             }
         } catch (RuntimeException e) {
             log.error("이미지 생성 작업 실패: jobId={}", work.jobId(), e);
-            progressService.markFailed(work.jobId(), GENERATION_FAILED_MESSAGE, elapsedMs(work));
+            progressService.markFailed(
+                    work.jobId(),
+                    resolveFailureMessage(List.of(e)),
+                    elapsedMs(work)
+            );
         }
+    }
+
+    private String resolveFailureMessage(Iterable<Throwable> failures) {
+        String messages = collectFailureMessages(failures);
+
+        if (containsAny(messages, "status=429", "resource_exhausted", "quota")) {
+            return "[GOOGLE_API_QUOTA_EXCEEDED] Google AI 사용량 한도를 초과했습니다.";
+        }
+        if (containsAny(messages, "status=401", "status=403", "permission_denied", "api key")) {
+            return "[GOOGLE_API_AUTH_FAILED] Google AI 인증 또는 모델 사용 권한을 확인해주세요.";
+        }
+        if (containsAny(messages, "status=400", "invalid_argument", "invalid json payload", "unknown name")) {
+            return "[GOOGLE_API_INVALID_REQUEST] Google AI 이미지 생성 요청 형식이 올바르지 않습니다.";
+        }
+        if (containsAny(messages, "resourceaccessexception", "readtimeoutexception", "connection", "timed out")) {
+            return "[GOOGLE_API_CONNECTION_FAILED] Google AI 연결 또는 응답 대기 중 오류가 발생했습니다.";
+        }
+        if (containsAny(messages, "storageexception", "storage.googleapis.com", "gcs")) {
+            return "[GCS_UPLOAD_FAILED] 생성 이미지를 저장하지 못했습니다.";
+        }
+        if (containsAny(messages, "aspectratio", "aspect ratio", "이미지 비율", "크롭")) {
+            return "[ASPECT_RATIO_PROCESSING_FAILED] 생성 이미지 비율 처리에 실패했습니다.";
+        }
+        return GENERATION_FAILED_MESSAGE;
+    }
+
+    private String collectFailureMessages(Iterable<Throwable> failures) {
+        StringBuilder messages = new StringBuilder();
+        for (Throwable failure : failures) {
+            Throwable current = failure;
+            while (current != null) {
+                messages.append(' ')
+                        .append(current.getClass().getSimpleName())
+                        .append(' ')
+                        .append(current.getMessage());
+                current = current.getCause();
+            }
+        }
+        return messages.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean containsAny(String value, String... candidates) {
+        for (String candidate : candidates) {
+            if (value.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void generateAndSave(ImageGenerationWork work, ImageGenerationWork.Task task) {
