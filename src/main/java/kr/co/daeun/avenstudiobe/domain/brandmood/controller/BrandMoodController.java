@@ -30,7 +30,12 @@ public class BrandMoodController {
     private final UsersService usersService;
 
     @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "브랜드 무드 분석", description = "로그인 사용자의 브랜드 URL과 선택 PDF 자료를 Claude Haiku 4.5로 분석하고 사용자 확인용 무드 JSON을 반환합니다. DB에는 저장하지 않습니다.")
+    @Operation(
+            summary = "브랜드 무드 분석",
+            description = "브랜드 URL과 선택 PDF를 분석합니다. 최상위 필드는 사용자 확인용 표시값이며, "
+                    + "brandName은 로그인 사용자의 브랜드에서 조회합니다. rawAnalysisJson에는 이미지 생성용 상세 분석과 "
+                    + "표시값이 함께 포함됩니다. DB에는 저장하지 않습니다."
+    )
     public ResponseEntity<BrandMoodAnalysisRespDto> analyze(
             @RequestParam("sourceUrl") String sourceUrl,
             @RequestParam(required = false) String sourceText,
@@ -50,7 +55,11 @@ public class BrandMoodController {
     }
 
     @PostMapping
-    @Operation(summary = "브랜드 무드 저장", description = "사용자가 확인 또는 수정한 브랜드 무드 분석 결과를 저장합니다.")
+    @Operation(
+            summary = "브랜드 무드 저장",
+            description = "사용자가 확인 또는 수정한 표시값을 저장하고, rawAnalysisJson의 상세 분석과 조합해 "
+                    + "이미지 생성용 브랜드 지시문을 서버에서 생성합니다."
+    )
     public ResponseEntity<BrandMoodRespDto> save(
             @Valid @RequestBody BrandMoodSaveReqDto request,
             Authentication authentication

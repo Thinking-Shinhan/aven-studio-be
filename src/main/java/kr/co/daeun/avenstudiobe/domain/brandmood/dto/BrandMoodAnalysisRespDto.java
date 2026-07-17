@@ -12,8 +12,8 @@ import java.util.List;
 @AllArgsConstructor
 public class BrandMoodAnalysisRespDto {
 
-    private String sourceType;
     private String sourceUrl;
+    private String brandName;
     private String brandSummary;
     private String designPhilosophy;
     private List<String> brandTone = new ArrayList<>();
