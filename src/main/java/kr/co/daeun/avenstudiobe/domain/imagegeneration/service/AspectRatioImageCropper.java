@@ -19,7 +19,7 @@ public class AspectRatioImageCropper {
             String requestedAspectRatio
     ) {
         if (requestedAspectRatio == null || requestedAspectRatio.isBlank()) {
-            return new CropResult(image, false);
+            throw new IllegalArgumentException("크롭할 이미지 비율이 없습니다.");
         }
 
         AspectRatio targetRatio = parseAspectRatio(requestedAspectRatio);

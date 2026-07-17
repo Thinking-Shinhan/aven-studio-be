@@ -7,13 +7,17 @@ import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
 import kr.co.daeun.avenstudiobe.global.exception.ImageGenerationQueueFullException;
 import kr.co.daeun.avenstudiobe.integration.google.GoogleAiImageProvider;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 
 import java.util.List;
 import java.util.Optional;
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -100,11 +104,48 @@ class ImageGenerationWorkerTest {
         worker.submit(work("first"));
 
         verify(provider, times(1)).generate(anyString(), any(), eq("3:4"), anyString());
+        ArgumentCaptor<byte[]> imageBytesCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(assetService, times(1)).saveGeneratedImage(
-                any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
+                imageBytesCaptor.capture(),
+                anyString(),
+                any(),
+                anyLong(),
+                anyString(),
+                anyString(),
+                anyString()
         );
+        assertImageDimensions(imageBytesCaptor.getValue(), 576, 768);
         verify(progressService).recordGeneratedResult(10L, asset, 0);
         verify(progressService).markSucceeded(anyLong(), anyInt());
+    }
+
+    @Test
+    void failsJobBeforeProviderCallWhenAspectRatioIsMissing() {
+        ImageGenerationWorker worker = worker(directExecutor);
+        ImageGenerationWork.Task task = new ImageGenerationWork.Task(
+                0,
+                "prompt",
+                List.of(),
+                null,
+                "BACK_VIEW",
+                "FULL_BODY",
+                "final instruction",
+                "FULL_BODY",
+                "description"
+        );
+
+        worker.submit(new ImageGenerationWork(
+                10L,
+                1L,
+                System.currentTimeMillis(),
+                List.of(task)
+        ));
+
+        verify(provider, never()).generate(anyString(), any(), any(), any());
+        verify(assetService, never()).saveGeneratedImage(
+                any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
+        );
+        verify(progressService).markFailed(anyLong(), anyString(), anyInt());
     }
 
     private ImageGenerationWorker worker(TaskExecutor jobExecutor) {
@@ -152,6 +193,16 @@ class ImageGenerationWorkerTest {
                     width,
                     height
             );
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private void assertImageDimensions(byte[] bytes, int expectedWidth, int expectedHeight) {
+        try {
+            java.awt.image.BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+            assertEquals(expectedWidth, image.getWidth());
+            assertEquals(expectedHeight, image.getHeight());
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
         }
