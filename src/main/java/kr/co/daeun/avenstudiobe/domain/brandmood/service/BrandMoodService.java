@@ -32,11 +32,13 @@ public class BrandMoodService {
     public BrandMoodAnalysisRespDto analyze(BrandMoodAnalyzeReqDto request, MultipartFile file, User user) {
         Brand brand = user.getBrand();
         validateRequiredSourceUrl(request);
+        boolean pdfAttached = hasPdf(file);
+        request.setSourceType(pdfAttached ? "PDF" : "URL");
 
         String systemPrompt = buildAnalyzeSystemPrompt();
         String userPrompt = buildAnalyzeUserPrompt(brand, request);
 
-        if (hasPdf(file)) {
+        if (pdfAttached) {
             validatePdf(file);
             String claudeText = anthropicMoodClient.analyzeBrandMoodWithPdf(systemPrompt, userPrompt, readPdf(file));
             return parseAnalysisResponse(request, claudeText, "PDF");

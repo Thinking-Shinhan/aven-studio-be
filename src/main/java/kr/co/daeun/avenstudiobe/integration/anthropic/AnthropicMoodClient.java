@@ -2,32 +2,31 @@ package kr.co.daeun.avenstudiobe.integration.anthropic;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import java.time.Duration;
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
 @Component
-@RequiredArgsConstructor
 public class AnthropicMoodClient {
 
-    private static final String MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-    private static final String ANTHROPIC_VERSION = "2023-06-01";
-
-    @Value("${anthropic.api-key:}")
-    private String apiKey;
-
-    @Value("${anthropic.model:claude-haiku-4-5}")
-    private String model;
-
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient = RestClient.create();
+    private final ClaudeProperties properties;
+    private final WebClient webClient;
+
+    public AnthropicMoodClient(
+            ClaudeProperties properties,
+            @Qualifier("brandMoodClaudeWebClient") WebClient webClient
+    ) {
+        this.properties = properties;
+        this.webClient = webClient;
+    }
 
     public String analyzeBrandMood(String systemPrompt, String userPrompt) {
         return requestAnalysis(systemPrompt, userPrompt, null);
@@ -45,7 +44,7 @@ public class AnthropicMoodClient {
         validateApiKey();
 
         Map<String, Object> requestBody = Map.of(
-                "model", model,
+                "model", properties.getModel(),
                 "max_tokens", 2000,
                 "temperature", 0.2,
                 "system", systemPrompt,
@@ -57,20 +56,20 @@ public class AnthropicMoodClient {
 
         String response;
         try {
-            response = restClient.post()
-                    .uri(MESSAGES_URL)
-                    .header("x-api-key", apiKey)
-                    .header("anthropic-version", ANTHROPIC_VERSION)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(requestBody)
+            response = webClient.post()
+                    .uri("/v1/messages")
+                    .bodyValue(requestBody)
                     .retrieve()
-                    .body(String.class);
-        } catch (RestClientResponseException e) {
+                    .bodyToMono(String.class)
+                    .block(Duration.ofSeconds(properties.getBrandMoodTimeoutSeconds()));
+        } catch (WebClientResponseException e) {
             throw new IllegalStateException(
                     "Claude API 요청에 실패했습니다. status=" + e.getStatusCode().value()
                             + ", response=" + abbreviate(e.getResponseBodyAsString()),
                     e
             );
+        } catch (Exception e) {
+            throw new IllegalStateException("Claude API 요청 중 네트워크 또는 타임아웃 오류가 발생했습니다.", e);
         }
 
         return extractText(response);
@@ -98,7 +97,7 @@ public class AnthropicMoodClient {
     }
 
     public String getModel() {
-        return model;
+        return properties.getModel();
     }
 
     private String extractText(String response) {
@@ -124,7 +123,7 @@ public class AnthropicMoodClient {
     }
 
     private void validateApiKey() {
-        if (apiKey == null || apiKey.isBlank()) {
+        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new IllegalStateException("ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다.");
         }
     }
