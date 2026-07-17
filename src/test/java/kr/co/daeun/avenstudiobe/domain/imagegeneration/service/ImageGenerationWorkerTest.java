@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 class ImageGenerationWorkerTest {
 
     private final GoogleAiImageProvider provider = mock(GoogleAiImageProvider.class);
+    private final AspectRatioImageCropper imageCropper = new AspectRatioImageCropper();
     private final ProductRepository productRepository = mock(ProductRepository.class);
     private final AssetService assetService = mock(AssetService.class);
     private final ImageGenerationProgressService progressService = mock(ImageGenerationProgressService.class);
@@ -86,19 +87,19 @@ class ImageGenerationWorkerTest {
     }
 
     @Test
-    void retriesOnceAndSavesOnlyMatchingAspectRatioOutput() {
+    void cropsMismatchedAspectRatioAndCallsProviderOnce() {
         Product product = mock(Product.class);
         Asset asset = mock(Asset.class);
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
         when(provider.generate(anyString(), any(), anyString(), anyString()))
-                .thenReturn(generatedImage(1344, 768), generatedImage(900, 1200));
+                .thenReturn(generatedImage(1344, 768));
         when(assetService.saveGeneratedImage(any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()))
                 .thenReturn(asset);
         ImageGenerationWorker worker = worker(directExecutor);
 
         worker.submit(work("first"));
 
-        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
+        verify(provider, times(1)).generate(anyString(), any(), eq("3:4"), anyString());
         verify(assetService, times(1)).saveGeneratedImage(
                 any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
         );
@@ -106,25 +107,10 @@ class ImageGenerationWorkerTest {
         verify(progressService).markSucceeded(anyLong(), anyInt());
     }
 
-    @Test
-    void rejectsOutputWhenBothAspectRatioAttemptsMismatch() {
-        when(provider.generate(anyString(), any(), anyString(), anyString()))
-                .thenReturn(generatedImage(1344, 768), generatedImage(1024, 1024));
-        ImageGenerationWorker worker = worker(directExecutor);
-
-        worker.submit(work("first"));
-
-        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
-        verify(assetService, never()).saveGeneratedImage(
-                any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()
-        );
-        verify(progressService, never()).recordGeneratedResult(anyLong(), any(), anyInt());
-        verify(progressService).markFailed(anyLong(), anyString(), anyInt());
-    }
-
     private ImageGenerationWorker worker(TaskExecutor jobExecutor) {
         return new ImageGenerationWorker(
                 provider,
+                imageCropper,
                 productRepository,
                 assetService,
                 progressService,
@@ -155,6 +141,19 @@ class ImageGenerationWorkerTest {
     }
 
     private GoogleAiImageProvider.GeneratedImage generatedImage(int width, int height) {
-        return new GoogleAiImageProvider.GeneratedImage(new byte[]{1, 2, 3}, "image/png", width, height);
+        try {
+            java.awt.image.BufferedImage source =
+                    new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(source, "png", output);
+            return new GoogleAiImageProvider.GeneratedImage(
+                    output.toByteArray(),
+                    "image/png",
+                    width,
+                    height
+            );
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
