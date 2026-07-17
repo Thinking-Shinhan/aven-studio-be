@@ -15,6 +15,7 @@ public class ClaudeProperties {
     private String model = "claude-haiku-4-5";
     private Integer maxTokens = 2048;
     private Integer timeoutSeconds = 20;
+    private Integer brandMoodTimeoutSeconds = 120;
     private Integer imagePlacementTimeoutSeconds = 15;
     private Integer maxConcurrentRequests = 4;
     private Integer concurrencyWaitMillis = 700;

@@ -5,6 +5,7 @@ import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -22,7 +23,16 @@ public class ClaudeConfig {
 
     @Bean
     public WebClient claudeWebClient() {
-        Duration timeout = Duration.ofSeconds(properties.getTimeoutSeconds());
+        return buildWebClient(Duration.ofSeconds(properties.getTimeoutSeconds()));
+    }
+
+    @Bean
+    @Qualifier("brandMoodClaudeWebClient")
+    public WebClient brandMoodClaudeWebClient() {
+        return buildWebClient(Duration.ofSeconds(properties.getBrandMoodTimeoutSeconds()));
+    }
+
+    private WebClient buildWebClient(Duration timeout) {
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Math.toIntExact(timeout.toMillis()))
                 .responseTimeout(timeout);

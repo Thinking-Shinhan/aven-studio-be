@@ -48,6 +48,7 @@ anthropic:
   model: ${ANTHROPIC_MODEL:claude-sonnet-4-6}
   max-tokens: 2048
   timeout-seconds: ${ANTHROPIC_TIMEOUT_SECONDS:20}
+  brand-mood-timeout-seconds: ${ANTHROPIC_BRAND_MOOD_TIMEOUT_SECONDS:120}
   image-placement-timeout-seconds: ${ANTHROPIC_IMAGE_PLACEMENT_TIMEOUT_SECONDS:20}
   max-concurrent-requests: ${ANTHROPIC_MAX_CONCURRENT_REQUESTS:4}
   concurrency-wait-millis: ${ANTHROPIC_CONCURRENCY_WAIT_MILLIS:700}
