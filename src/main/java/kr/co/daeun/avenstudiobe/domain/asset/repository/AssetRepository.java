@@ -59,6 +59,18 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
             """)
     List<AssetCopyProjection> findCopyContexts(Long productId, Set<Long> assetIds);
 
+    @Query("""
+            select a.id as id,
+                   a.objectName as objectName,
+                   a.contentType as contentType,
+                   a.assetRole as assetRole,
+                   a.description as description
+            from Asset a
+            where a.product.id = :productId
+              and a.id in :assetIds
+            """)
+    List<ReviewAssetProjection> findReviewAssets(Long productId, Set<Long> assetIds);
+
     @Query(value = """
         with image_counts as (
             select a.product_id,

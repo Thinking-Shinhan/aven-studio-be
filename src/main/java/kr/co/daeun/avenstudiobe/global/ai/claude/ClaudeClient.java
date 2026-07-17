@@ -4,12 +4,17 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClientRequest;
 
 @Component
 public class ClaudeClient {
+
+    private static final Consumer<String> IGNORE_STOP_REASON = ignored -> { };
 
     private final ClaudeProperties properties;
     private final WebClient claudeWebClient;
@@ -37,20 +42,116 @@ public class ClaudeClient {
 
         acquirePermit();
         try {
-            return executeWithRetry(systemPrompt, userPrompt, positiveOrDefault(timeoutSeconds, 20));
+            ClaudeMessageReqDto request = new ClaudeMessageReqDto(
+                    properties.getModel(),
+                    properties.getMaxTokens(),
+                    0.2,
+                    systemPrompt,
+                    List.of(new ClaudeMessageDto("user", userPrompt))
+            );
+            return executeWithRetry(request, positiveOrDefault(timeoutSeconds, 20), IGNORE_STOP_REASON).text();
         } finally {
             requestPermits.release();
         }
     }
 
-    private String executeWithRetry(String systemPrompt, String userPrompt, int timeoutSeconds) {
+    public String requestMultimodalText(
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds
+    ) {
+        return requestMultimodalText(
+                systemPrompt,
+                userContentBlocks,
+                maxTokens,
+                timeoutSeconds,
+                IGNORE_STOP_REASON
+        );
+    }
+
+    public String requestMultimodalText(
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds,
+            Consumer<String> stopReasonObserver
+    ) {
+        ClaudeTextResponse response = requestMultimodalResponse(
+                systemPrompt,
+                userContentBlocks,
+                maxTokens,
+                timeoutSeconds,
+                stopReasonObserver
+        );
+        return response.text();
+    }
+
+    public ClaudeTextResponse requestMultimodalTextWithMetadata(
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds
+    ) {
+        return requestMultimodalResponse(
+                systemPrompt,
+                userContentBlocks,
+                maxTokens,
+                timeoutSeconds,
+                IGNORE_STOP_REASON
+        );
+    }
+
+    private ClaudeTextResponse requestMultimodalResponse(
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds,
+            Consumer<String> stopReasonObserver
+    ) {
+        validateApiKey();
+
+        if (userContentBlocks == null || userContentBlocks.isEmpty()) {
+            throw new ClaudeApiException("userContentBlocks가 비어 있습니다.");
+        }
+        if (maxTokens == null || maxTokens <= 0) {
+            throw new ClaudeApiException("maxTokens는 양수여야 합니다.");
+        }
+
+        acquirePermit();
+        try {
+            ClaudeMultimodalMessageReqDto request = new ClaudeMultimodalMessageReqDto(
+                    properties.getModel(),
+                    maxTokens,
+                    0.2,
+                    systemPrompt,
+                    List.of(new ClaudeMultimodalMessageDto("user", userContentBlocks))
+            );
+            int effectiveTimeout = positiveOrDefault(
+                    timeoutSeconds,
+                    positiveOrDefault(properties.getReviewImageTimeoutSeconds(), 30)
+            );
+            Consumer<String> observer = stopReasonObserver == null
+                    ? IGNORE_STOP_REASON
+                    : stopReasonObserver;
+            return executeWithRetry(request, effectiveTimeout, observer);
+        } finally {
+            requestPermits.release();
+        }
+    }
+
+    private ClaudeTextResponse executeWithRetry(
+            Object request,
+            int timeoutSeconds,
+            Consumer<String> stopReasonObserver
+    ) {
         int maxRetries = nonNegativeOrDefault(properties.getMaxRetries(), 1);
         long retryDelayMillis = nonNegativeOrDefault(properties.getRetryDelayMillis(), 300);
         long deadlineNanos = System.nanoTime() + Duration.ofSeconds(timeoutSeconds).toNanos();
 
         for (int attempt = 0; ; attempt++) {
             try {
-                return executeRequest(systemPrompt, userPrompt, remainingTimeout(deadlineNanos));
+                return executeRequest(request, remainingTimeout(deadlineNanos), stopReasonObserver);
             } catch (ClaudeApiException e) {
                 if (attempt >= maxRetries || !isRetryable(e)) {
                     throw e;
@@ -60,19 +161,18 @@ public class ClaudeClient {
         }
     }
 
-    private String executeRequest(String systemPrompt, String userPrompt, Duration timeout) {
-
-        ClaudeMessageReqDto request = new ClaudeMessageReqDto(
-                properties.getModel(),
-                properties.getMaxTokens(),
-                0.2,
-                systemPrompt,
-                List.of(new ClaudeMessageDto("user", userPrompt))
-        );
-
+    private ClaudeTextResponse executeRequest(
+            Object request,
+            Duration timeout,
+            Consumer<String> stopReasonObserver
+    ) {
         try {
-            ClaudeMessageRespDto response = claudeWebClient.post()
+            ResponseEntity<ClaudeMessageRespDto> responseEntity = claudeWebClient.post()
                     .uri("/v1/messages")
+                    .httpRequest(clientRequest -> {
+                        HttpClientRequest nativeRequest = clientRequest.getNativeRequest();
+                        nativeRequest.responseTimeout(timeout);
+                    })
                     .bodyValue(request)
                     .retrieve()
                     .onStatus(
@@ -81,14 +181,21 @@ public class ClaudeClient {
                                     .defaultIfEmpty("")
                                     .map(body -> new ClaudeApiException(clientResponse.statusCode().value(), body))
                     )
-                    .bodyToMono(ClaudeMessageRespDto.class)
+                    .toEntity(ClaudeMessageRespDto.class)
                     .onErrorMap(
                             throwable -> !(throwable instanceof ClaudeApiException),
                             throwable -> new ClaudeApiException("Claude request failed.", throwable)
                     )
-                    .block(timeout);
+                    .block(timeout.plusSeconds(2));
 
-            return extractText(response);
+            ClaudeMessageRespDto response = responseEntity == null ? null : responseEntity.getBody();
+            String stopReason = response == null ? null : response.stopReason();
+            stopReasonObserver.accept(stopReason);
+            return new ClaudeTextResponse(
+                    extractText(response),
+                    stopReason,
+                    responseEntity == null ? null : responseEntity.getHeaders().getFirst("request-id")
+            );
         } catch (ClaudeApiException e) {
             throw e;
         } catch (Exception e) {
@@ -161,5 +268,12 @@ public class ClaudeClient {
 
     private static int nonNegativeOrDefault(Integer value, int defaultValue) {
         return value == null || value < 0 ? defaultValue : value;
+    }
+
+    public record ClaudeTextResponse(
+            String text,
+            String stopReason,
+            String requestId
+    ) {
     }
 }

@@ -21,4 +21,9 @@ public class ClaudeProperties {
     private Integer concurrencyWaitMillis = 700;
     private Integer maxRetries = 1;
     private Integer retryDelayMillis = 300;
+    private Integer reviewMaxImages = 12;
+    private Integer reviewImageMaxEdge = 512;
+    private Integer reviewImageTimeoutSeconds = 30;
+    private Integer reviewMaxIssues = 30;
+    private Integer reviewMaxTokens = 8192;
 }

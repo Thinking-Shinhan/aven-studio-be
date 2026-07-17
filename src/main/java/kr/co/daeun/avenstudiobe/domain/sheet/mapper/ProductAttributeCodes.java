@@ -34,5 +34,33 @@ public final class ProductAttributeCodes {
             "얇음", 3
     );
 
+    public static String toDisplayText(AttributeType attributeType, int code) {
+        if (attributeType == null) {
+            return null;
+        }
+
+        Map<String, Integer> codes = switch (attributeType) {
+            case LINING -> LINING;
+            case ELASTICITY -> ELASTICITY;
+            case TRANSPARENCY -> TRANSPARENCY;
+            case TOUCH_FEELING -> TOUCH_FEELING;
+            case THICKNESS -> THICKNESS;
+        };
+
+        return codes.entrySet().stream()
+                .filter(entry -> entry.getValue() == code)
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public enum AttributeType {
+        LINING,
+        ELASTICITY,
+        TRANSPARENCY,
+        TOUCH_FEELING,
+        THICKNESS
+    }
+
     private ProductAttributeCodes() {}
 }

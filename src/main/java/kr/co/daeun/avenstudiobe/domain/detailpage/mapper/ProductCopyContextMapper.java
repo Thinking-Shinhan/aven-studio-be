@@ -3,6 +3,7 @@ package kr.co.daeun.avenstudiobe.domain.detailpage.mapper;
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ProductCopyContext;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.mapper.ProductAttributeTextMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 public class ProductCopyContextMapper {
 
     private final BrandMoodRepository brandMoodRepository;
+    private final ProductAttributeTextMapper productAttributeTextMapper;
 
     public ProductCopyContext from(Product product) {
         if (product == null) {
@@ -24,38 +26,11 @@ public class ProductCopyContextMapper {
                 product.getColor(),
                 product.getFitDescription(),
                 product.getFabricationDescription(),
-                toElasticityText(product.getElasticity()),
-                toTouchFeelingText(product.getTouchFeeling()),
-                toThicknessText(product.getThickness()),
+                productAttributeTextMapper.toElasticityText(product.getElasticity()),
+                productAttributeTextMapper.toTouchFeelingText(product.getTouchFeeling()),
+                productAttributeTextMapper.toThicknessText(product.getThickness()),
                 resolveBrandTone(product)
         );
-    }
-
-    private String toElasticityText(int value) {
-        return switch (value) {
-            case 1 -> "매우좋음";
-            case 2 -> "보통";
-            case 3 -> "없음";
-            default -> null;
-        };
-    }
-
-    private String toTouchFeelingText(int value) {
-        return switch (value) {
-            case 1 -> "쾌적함";
-            case 2 -> "부드러움";
-            case 3 -> "드라이함";
-            default -> null;
-        };
-    }
-
-    private String toThicknessText(int value) {
-        return switch (value) {
-            case 1 -> "두꺼움";
-            case 2 -> "보통";
-            case 3 -> "얇음";
-            default -> null;
-        };
     }
 
     private String resolveBrandTone(Product product) {
