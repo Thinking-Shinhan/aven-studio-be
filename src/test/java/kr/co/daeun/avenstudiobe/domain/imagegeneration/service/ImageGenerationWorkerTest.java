@@ -80,6 +80,23 @@ class ImageGenerationWorkerTest {
     }
 
     @Test
+    void storesSafeFailureCodeForInvalidGoogleRequest() {
+        when(provider.generate(anyString(), any(), anyString(), anyString()))
+                .thenThrow(new IllegalStateException(
+                        "Google AI API 요청에 실패했습니다. status=400, response=INVALID_ARGUMENT"
+                ));
+        ImageGenerationWorker worker = worker(directExecutor);
+
+        worker.submit(work("first"));
+
+        verify(progressService).markFailed(
+                eq(10L),
+                eq("[GOOGLE_API_INVALID_REQUEST] Google AI 이미지 생성 요청 형식이 올바르지 않습니다."),
+                anyInt()
+        );
+    }
+
+    @Test
     void returnsQueueFullWhenJobExecutorRejectsTask() {
         TaskExecutor rejectingExecutor = task -> {
             throw new TaskRejectedException("queue full");
