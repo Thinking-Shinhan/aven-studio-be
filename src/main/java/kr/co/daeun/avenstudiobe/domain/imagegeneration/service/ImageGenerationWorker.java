@@ -21,10 +21,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class ImageGenerationWorker {
 
     private static final String GENERATION_FAILED_MESSAGE = "이미지 생성 중 오류가 발생했습니다.";
-    private static final int MAX_ASPECT_RATIO_RETRIES = 1;
-    private static final double ASPECT_RATIO_TOLERANCE = 0.01;
 
     private final GoogleAiImageProvider imageProvider;
+    private final AspectRatioImageCropper imageCropper;
     private final ProductRepository productRepository;
     private final AssetService assetService;
     private final ImageGenerationProgressService progressService;
@@ -35,6 +34,7 @@ public class ImageGenerationWorker {
 
     public ImageGenerationWorker(
             GoogleAiImageProvider imageProvider,
+            AspectRatioImageCropper imageCropper,
             ProductRepository productRepository,
             AssetService assetService,
             ImageGenerationProgressService progressService,
@@ -42,6 +42,7 @@ public class ImageGenerationWorker {
             @Qualifier("imageGenerationTaskExecutor") TaskExecutor taskExecutor
     ) {
         this.imageProvider = imageProvider;
+        this.imageCropper = imageCropper;
         this.productRepository = productRepository;
         this.assetService = assetService;
         this.progressService = progressService;
@@ -88,7 +89,7 @@ public class ImageGenerationWorker {
     }
 
     private void generateAndSave(ImageGenerationWork work, ImageGenerationWork.Task task) {
-        GoogleAiImageProvider.GeneratedImage generatedImage = generateWithAspectRatioValidation(work, task);
+        GoogleAiImageProvider.GeneratedImage generatedImage = generateAndCorrectAspectRatio(work, task);
         Product product = productRepository.findById(work.productId())
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
         Asset asset = assetService.saveGeneratedImage(
@@ -103,94 +104,52 @@ public class ImageGenerationWorker {
         progressService.recordGeneratedResult(work.jobId(), asset, task.outputIndex());
     }
 
-    private GoogleAiImageProvider.GeneratedImage generateWithAspectRatioValidation(
+    private GoogleAiImageProvider.GeneratedImage generateAndCorrectAspectRatio(
             ImageGenerationWork work,
             ImageGenerationWork.Task task
     ) {
-        GoogleAiImageProvider.GeneratedImage lastImage = null;
-
-        for (int retryCount = 0; retryCount <= MAX_ASPECT_RATIO_RETRIES; retryCount++) {
-            String finalInstruction = retryCount == 0
-                    ? task.finalInstruction()
-                    : appendRatioCorrection(task.finalInstruction(), task.aspectRatio(), lastImage);
-
-            log.info(
-                    "Google AI 이미지 생성 요청: jobId={}, outputIndex={}, model={}, cameraAngle={}, framing={}, requestedAspectRatio={}, referenceCount={}, retryCount={}",
-                    work.jobId(),
-                    task.outputIndex(),
-                    imageProvider.getImageModel(),
-                    task.cameraAngle(),
-                    task.framing(),
-                    task.aspectRatio(),
-                    task.referenceImages().size(),
-                    retryCount
-            );
-
-            lastImage = imageProvider.generate(
-                    task.prompt(),
-                    task.referenceImages(),
-                    task.aspectRatio(),
-                    finalInstruction
-            );
-
-            double actualRatio = (double) lastImage.width() / lastImage.height();
-            log.info(
-                    "Google AI 이미지 생성 응답: jobId={}, outputIndex={}, requestedAspectRatio={}, generatedWidth={}, generatedHeight={}, actualAspectRatio={}, retryCount={}",
-                    work.jobId(),
-                    task.outputIndex(),
-                    task.aspectRatio(),
-                    lastImage.width(),
-                    lastImage.height(),
-                    actualRatio,
-                    retryCount
-            );
-
-            if (matchesRequestedAspectRatio(lastImage, task.aspectRatio())) {
-                return lastImage;
-            }
-        }
-
-        throw new IllegalStateException(
-                "생성 이미지 비율이 요청과 일치하지 않습니다. requested=" + task.aspectRatio()
-                        + ", actual=" + lastImage.width() + "x" + lastImage.height()
+        log.info(
+                "Google AI 이미지 생성 요청: jobId={}, outputIndex={}, model={}, cameraAngle={}, framing={}, requestedAspectRatio={}, referenceCount={}",
+                work.jobId(),
+                task.outputIndex(),
+                imageProvider.getImageModel(),
+                task.cameraAngle(),
+                task.framing(),
+                task.aspectRatio(),
+                task.referenceImages().size()
         );
-    }
 
-    private boolean matchesRequestedAspectRatio(
-            GoogleAiImageProvider.GeneratedImage image,
-            String requestedAspectRatio
-    ) {
-        if (requestedAspectRatio == null || requestedAspectRatio.isBlank()) {
-            return true;
+        GoogleAiImageProvider.GeneratedImage generatedImage = imageProvider.generate(
+                task.prompt(),
+                task.referenceImages(),
+                task.aspectRatio(),
+                task.finalInstruction()
+        );
+        AspectRatioImageCropper.CropResult cropResult =
+                imageCropper.cropToAspectRatio(generatedImage, task.aspectRatio());
+
+        if (cropResult.cropped()) {
+            log.info(
+                    "생성 이미지 비율 중앙 크롭: jobId={}, outputIndex={}, requestedAspectRatio={}, originalWidth={}, originalHeight={}, croppedWidth={}, croppedHeight={}, correction=CENTER_CROP",
+                    work.jobId(),
+                    task.outputIndex(),
+                    task.aspectRatio(),
+                    generatedImage.width(),
+                    generatedImage.height(),
+                    cropResult.image().width(),
+                    cropResult.image().height()
+            );
+        } else {
+            log.info(
+                    "생성 이미지 비율 확인: jobId={}, outputIndex={}, requestedAspectRatio={}, generatedWidth={}, generatedHeight={}, correction=NONE",
+                    work.jobId(),
+                    task.outputIndex(),
+                    task.aspectRatio(),
+                    generatedImage.width(),
+                    generatedImage.height()
+            );
         }
-
-        String[] ratioParts = requestedAspectRatio.split(":");
-        if (ratioParts.length != 2) {
-            throw new IllegalArgumentException("지원하지 않는 이미지 비율 형식입니다: " + requestedAspectRatio);
-        }
-
-        double expectedRatio = Double.parseDouble(ratioParts[0]) / Double.parseDouble(ratioParts[1]);
-        double actualRatio = (double) image.width() / image.height();
-        double relativeError = Math.abs(actualRatio - expectedRatio) / expectedRatio;
-        return relativeError <= ASPECT_RATIO_TOLERANCE;
-    }
-
-    private String appendRatioCorrection(
-            String finalInstruction,
-            String requestedAspectRatio,
-            GoogleAiImageProvider.GeneratedImage previousImage
-    ) {
-        String correction = """
-
-                [RETRY CORRECTION]
-                The previous output was incorrectly generated as %dx%d.
-                Discard that canvas layout and generate an exact %s image.
-                """.formatted(previousImage.width(), previousImage.height(), requestedAspectRatio).stripTrailing();
-
-        if (finalInstruction == null || finalInstruction.isBlank()) {
-            return correction.strip();
-        }
-        return finalInstruction + "\n\n" + correction.strip();
+        return cropResult.image();
     }
 
     private Throwable unwrap(Throwable error) {
