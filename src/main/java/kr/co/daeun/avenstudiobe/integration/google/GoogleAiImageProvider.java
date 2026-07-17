@@ -25,7 +25,7 @@ import java.util.Map;
 public class GoogleAiImageProvider {
 
     private static final String GENERATE_CONTENT_URL =
-            "https://generativelanguage.googleapis.com/v1/models/%s:generateContent";
+            "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent";
 
     private final GoogleAiProperties properties;
     @Qualifier("googleAiRestClient")
@@ -186,6 +186,10 @@ public class GoogleAiImageProvider {
 
     public String getImageModel() {
         return properties.getImageModel();
+    }
+
+    String getGenerateContentUrl() {
+        return GENERATE_CONTENT_URL.formatted(properties.getImageModel());
     }
 
     private GeneratedImage parseGeneratedImage(String response) {

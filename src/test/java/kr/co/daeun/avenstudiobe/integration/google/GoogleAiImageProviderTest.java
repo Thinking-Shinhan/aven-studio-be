@@ -25,6 +25,14 @@ class GoogleAiImageProviderTest {
     );
 
     @Test
+    void usesV1BetaGenerateContentEndpointForImageConfig() {
+        assertEquals(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-test-image:generateContent",
+                provider.getGenerateContentUrl()
+        );
+    }
+
+    @Test
     void includesAspectRatioInImageConfig() {
         Map<String, Object> requestBody = provider.buildRequestBody(
                 "prompt",
