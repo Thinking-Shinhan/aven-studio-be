@@ -108,6 +108,12 @@ public class ImageGenerationWorker {
             ImageGenerationWork work,
             ImageGenerationWork.Task task
     ) {
+        if (task.aspectRatio() == null || task.aspectRatio().isBlank()) {
+            throw new IllegalStateException(
+                    "이미지 생성 작업에 aspectRatio가 전달되지 않았습니다. jobId=" + work.jobId()
+            );
+        }
+
         log.info(
                 "Google AI 이미지 생성 요청: jobId={}, outputIndex={}, model={}, cameraAngle={}, framing={}, requestedAspectRatio={}, referenceCount={}",
                 work.jobId(),

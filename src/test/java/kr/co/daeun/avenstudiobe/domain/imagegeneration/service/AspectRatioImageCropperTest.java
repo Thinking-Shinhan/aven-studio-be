@@ -12,11 +12,24 @@ import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AspectRatioImageCropperTest {
 
     private final AspectRatioImageCropper cropper = new AspectRatioImageCropper();
+
+    @Test
+    void rejectsMissingAspectRatio() {
+        GoogleAiImageProvider.GeneratedImage source = image(1344, 768);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> cropper.cropToAspectRatio(source, null)
+        );
+
+        assertEquals("크롭할 이미지 비율이 없습니다.", exception.getMessage());
+    }
 
     @Test
     void cropsLandscapeImageToNineBySixteen() throws Exception {

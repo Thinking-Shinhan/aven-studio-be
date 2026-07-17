@@ -1132,8 +1132,8 @@ public class ImageGenerationService {
 
     private String resolveAspectRatio(JsonNode userOptions) {
         String aspectRatioValue = optionValue(userOptions, "aspectRatio");
-        if (aspectRatioValue == null) {
-            return null;
+        if (aspectRatioValue == null || aspectRatioValue.isBlank()) {
+            throw new IllegalArgumentException("이미지 비율은 필수입니다.");
         }
 
         String aspectRatio = ASPECT_RATIO_LABELS.get(aspectRatioValue);

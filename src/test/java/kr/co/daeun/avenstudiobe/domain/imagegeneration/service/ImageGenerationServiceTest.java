@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -58,6 +59,18 @@ class ImageGenerationServiceTest {
             null
     );
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void missingAspectRatioIsRejected() {
+        JsonNode userOptions = objectMapper.createObjectNode();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invokeAspectRatio(userOptions)
+        );
+
+        assertEquals("이미지 비율은 필수입니다.", exception.getMessage());
+    }
 
     @Test
     void omittedUserOptionsDoNotThrowWhenBuildingMetadata() throws Exception {
@@ -521,13 +534,20 @@ class ImageGenerationServiceTest {
     }
 
     private String invokeUserOptionsInstruction(String cutType, JsonNode userOptions) throws Exception {
+        ObjectNode normalizedOptions = userOptions == null
+                ? objectMapper.createObjectNode()
+                : (ObjectNode) userOptions.deepCopy();
+        if (!normalizedOptions.hasNonNull("aspectRatio")) {
+            normalizedOptions.put("aspectRatio", "RATIO_1_1");
+        }
+
         Method method = ImageGenerationService.class.getDeclaredMethod(
                 "buildUserOptionsInstruction",
                 String.class,
                 JsonNode.class
         );
         method.setAccessible(true);
-        return (String) method.invoke(service, cutType, userOptions);
+        return (String) method.invoke(service, cutType, normalizedOptions);
     }
 
     private void assertCameraInstructionContains(String cameraAngle, String expected) throws Exception {
