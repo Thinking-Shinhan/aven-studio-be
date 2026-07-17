@@ -45,7 +45,7 @@ public class AnthropicMoodClient {
 
         Map<String, Object> requestBody = Map.of(
                 "model", properties.getModel(),
-                "max_tokens", 2000,
+                "max_tokens", 4000,
                 "temperature", 0.2,
                 "system", systemPrompt,
                 "messages", List.of(Map.of(
