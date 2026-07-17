@@ -9,6 +9,10 @@ import lombok.Data;
 @Data
 public class TextSlotReqDto {
 
+    public static final String TEXT_ROLE_REGEXP = "EYEBROW|HEADLINE|SUBHEADLINE|BODY|CAPTION";
+    public static final String TEXT_ROLE_MESSAGE =
+            "textRole must be one of EYEBROW, HEADLINE, SUBHEADLINE, BODY, CAPTION.";
+
     @NotBlank
     private String slotKey;
 
@@ -16,8 +20,7 @@ public class TextSlotReqDto {
     private Integer slotOrder;
 
     @NotBlank
-    @Pattern(regexp = "EYEBROW|HEADLINE|SUBHEADLINE|BODY|CAPTION",
-            message = "textRole must be one of EYEBROW, HEADLINE, SUBHEADLINE, BODY, CAPTION.")
+    @Pattern(regexp = TEXT_ROLE_REGEXP, message = TEXT_ROLE_MESSAGE)
     private String textRole;
 
     @NotNull

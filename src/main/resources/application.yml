@@ -53,6 +53,11 @@ anthropic:
   concurrency-wait-millis: ${ANTHROPIC_CONCURRENCY_WAIT_MILLIS:700}
   max-retries: ${ANTHROPIC_MAX_RETRIES:1}
   retry-delay-millis: ${ANTHROPIC_RETRY_DELAY_MILLIS:300}
+  review-max-images: 12
+  review-image-max-edge: 512
+  review-image-timeout-seconds: 30
+  review-max-issues: 30
+  review-max-tokens: 8192
 image-generation:
   gcs-save-enabled: ${IMAGE_GENERATION_GCS_SAVE_ENABLED:true}
   job-executor:

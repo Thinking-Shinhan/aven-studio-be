@@ -2,6 +2,7 @@ package kr.co.daeun.avenstudiobe.domain.detailpage.mapper;
 
 import kr.co.daeun.avenstudiobe.domain.brandmood.repository.BrandMoodRepository;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.mapper.ProductAttributeTextMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,17 +13,16 @@ import static org.mockito.Mockito.when;
 class ProductCopyContextMapperTest {
 
     private final BrandMoodRepository brandMoodRepository = mock(BrandMoodRepository.class);
-    private final ProductCopyContextMapper mapper = new ProductCopyContextMapper(brandMoodRepository);
+    private final ProductCopyContextMapper mapper = new ProductCopyContextMapper(
+            brandMoodRepository,
+            new ProductAttributeTextMapper()
+    );
 
     @Test
-    void mapsProductAttributesToTheirSourceMeaning() {
-        Product product = product(1, 2, 3);
-
-        var context = mapper.from(product);
-
-        assertEquals("매우좋음", context.elasticity());
-        assertEquals("부드러움", context.touchFeeling());
-        assertEquals("얇음", context.thickness());
+    void preservesEveryLegacyGenerateCopyAttributeMapping() {
+        assertAttributes(product(1, 1, 1), "매우좋음", "쾌적함", "두꺼움");
+        assertAttributes(product(2, 2, 2), "보통", "부드러움", "보통");
+        assertAttributes(product(3, 3, 3), "없음", "드라이함", "얇음");
     }
 
     @Test
@@ -52,5 +52,17 @@ class ProductCopyContextMapperTest {
         when(product.getTouchFeeling()).thenReturn(touchFeeling);
         when(product.getThickness()).thenReturn(thickness);
         return product;
+    }
+
+    private void assertAttributes(
+            Product product,
+            String elasticity,
+            String touchFeeling,
+            String thickness
+    ) {
+        var context = mapper.from(product);
+        assertEquals(elasticity, context.elasticity());
+        assertEquals(touchFeeling, context.touchFeeling());
+        assertEquals(thickness, context.thickness());
     }
 }

@@ -11,6 +11,9 @@ import lombok.Data;
 @Data
 public class CopyTemplateBlockReqDto {
 
+    public static final String TEMPLATE_TYPE_REGEXP = "IMAGE|TEXT|MIXED";
+    public static final String TEMPLATE_TYPE_MESSAGE = "templateType must be one of IMAGE, TEXT, MIXED.";
+
     @NotNull
     private Integer blockOrder;
 
@@ -21,7 +24,7 @@ public class CopyTemplateBlockReqDto {
     private String templateKey;
 
     @NotBlank
-    @Pattern(regexp = "IMAGE|TEXT|MIXED", message = "templateType must be one of IMAGE, TEXT, MIXED.")
+    @Pattern(regexp = TEMPLATE_TYPE_REGEXP, message = TEMPLATE_TYPE_MESSAGE)
     private String templateType;
 
     @Size(max = 30)
