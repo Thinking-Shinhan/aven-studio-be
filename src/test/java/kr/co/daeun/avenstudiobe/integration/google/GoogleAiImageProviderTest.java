@@ -25,7 +25,7 @@ class GoogleAiImageProviderTest {
     );
 
     @Test
-    void includesAspectRatioInStructuredResponseFormat() {
+    void includesAspectRatioInImageConfig() {
         Map<String, Object> requestBody = provider.buildRequestBody(
                 "prompt",
                 List.of(),
@@ -36,13 +36,12 @@ class GoogleAiImageProviderTest {
         Map<String, Object> generationConfig =
                 (Map<String, Object>) requestBody.get("generationConfig");
         @SuppressWarnings("unchecked")
-        Map<String, Object> responseFormat =
-                (Map<String, Object>) generationConfig.get("responseFormat");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> image = (Map<String, Object>) responseFormat.get("image");
+        Map<String, Object> imageConfig =
+                (Map<String, Object>) generationConfig.get("imageConfig");
 
         assertFalse(generationConfig.containsKey("responseModalities"));
-        assertEquals("3:4", image.get("aspectRatio"));
+        assertFalse(generationConfig.containsKey("responseFormat"));
+        assertEquals("3:4", imageConfig.get("aspectRatio"));
     }
 
     @Test
