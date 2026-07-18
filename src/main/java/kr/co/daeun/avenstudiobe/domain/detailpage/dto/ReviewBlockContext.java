@@ -9,7 +9,31 @@ public record ReviewBlockContext(
         String templateType,
         List<CopyReviewReqDto.ReviewTextSlotReqDto> textSlots,
         List<Long> placedImageAssetIds,
+        List<Long> associatedImageAssetIds,
         List<Long> neighboringImageAssetIds,
         boolean imagesOmitted
 ) {
+
+    public ReviewBlockContext(
+            Integer blockOrder,
+            String instanceKey,
+            String templateKey,
+            String templateType,
+            List<CopyReviewReqDto.ReviewTextSlotReqDto> textSlots,
+            List<Long> placedImageAssetIds,
+            List<Long> neighboringImageAssetIds,
+            boolean imagesOmitted
+    ) {
+        this(
+                blockOrder,
+                instanceKey,
+                templateKey,
+                templateType,
+                textSlots,
+                placedImageAssetIds,
+                List.of(),
+                neighboringImageAssetIds,
+                imagesOmitted
+        );
+    }
 }

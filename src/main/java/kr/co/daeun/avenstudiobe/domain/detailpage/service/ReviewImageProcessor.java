@@ -83,7 +83,13 @@ public class ReviewImageProcessor {
             for (Long assetId : safeList(block.placedImageAssetIds())) {
                 sequence = addCandidate(
                         bestCandidateByAssetId,
-                        new ImageCandidate(assetId, ImagePriority.PLACED, block.blockOrder(), sequence)
+                        new ImageCandidate(assetId, ImagePriority.DIRECT, block.blockOrder(), sequence)
+                );
+            }
+            for (Long assetId : safeList(block.associatedImageAssetIds())) {
+                sequence = addCandidate(
+                        bestCandidateByAssetId,
+                        new ImageCandidate(assetId, ImagePriority.DIRECT, block.blockOrder(), sequence)
                 );
             }
             for (Long assetId : safeList(block.neighboringImageAssetIds())) {
@@ -135,12 +141,15 @@ public class ReviewImageProcessor {
                 .filter(Objects::nonNull)
                 .map(block -> {
                     List<Long> originalPlaced = safeList(block.placedImageAssetIds());
+                    List<Long> originalAssociated = safeList(block.associatedImageAssetIds());
                     List<Long> selectedPlaced = filterSelected(originalPlaced, selectedAssetIds);
+                    List<Long> selectedAssociated = filterSelected(originalAssociated, selectedAssetIds);
                     List<Long> selectedNeighboring = filterSelected(
                             safeList(block.neighboringImageAssetIds()),
                             selectedAssetIds
                     );
-                    boolean imagesOmitted = originalPlaced.stream()
+                    boolean imagesOmitted = java.util.stream.Stream
+                            .concat(originalPlaced.stream(), originalAssociated.stream())
                             .filter(Objects::nonNull)
                             .anyMatch(assetId -> !selectedAssetIds.contains(assetId));
 
@@ -151,6 +160,7 @@ public class ReviewImageProcessor {
                             block.templateType(),
                             block.textSlots(),
                             selectedPlaced,
+                            selectedAssociated,
                             selectedNeighboring,
                             imagesOmitted
                     );
@@ -268,7 +278,7 @@ public class ReviewImageProcessor {
     }
 
     private enum ImagePriority {
-        PLACED,
+        DIRECT,
         NEIGHBORING
     }
 }

@@ -34,9 +34,10 @@ public class CopyReviewPromptBuilder {
                 - 상품 정보에 근거가 없으면 CLAIM_RISK로 판단하세요.
                 - 상품 정보와 직접 반대되는 경우에만 CONTENT_MISMATCH로 판단하세요.
                 - 이미지로 확인할 수 없다는 이유만으로 CONTENT_MISMATCH를 반환하지 마세요.
-                - CONTENT_MISMATCH의 직접 이미지 근거는 placedImageAssetIds에 연결된 이미지만 사용하세요.
+                - CONTENT_MISMATCH의 직접 이미지 근거는 placedImageAssetIds 또는 associatedImageAssetIds에 연결된 이미지만 사용하세요.
+                - associatedImageAssetIds는 현재 텍스트 블록 바로 앞의 IMAGE 템플릿 이미지이며, 현재 문구와 직접 연결된 근거로 사용하세요.
                 - neighboringImageAssetIds 이미지는 페이지 흐름 파악용이며 직접 불일치 근거로 사용하지 마세요.
-                - imagesOmitted가 true인 블록에는 이미지 근거 CONTENT_MISMATCH를 반환하지 마세요.
+                - imagesOmitted가 true이면 직접 근거 이미지 일부가 누락된 것이므로 해당 블록에는 이미지 근거 CONTENT_MISMATCH를 반환하지 마세요.
                 - 제공된 상품 정보에 없는 인증, 기능, 효과, 소재 또는 세부 사항을 가정하지 마세요.
 
                 이슈 작성 규칙:
