@@ -47,6 +47,9 @@ public class BrandService {
         LocalDateTime sheetSyncedAt = sheetConnection
                 .map(SheetConnection::getLastSyncedAt)
                 .orElse(null);
+        String sheetUrl = sheetConnection
+                .map(SheetConnection::getUrl)
+                .orElse(null);
 
         return new BrandHomeRespDto(
                 brand.getName(),
@@ -56,6 +59,7 @@ public class BrandService {
                 brandMood.map(mood -> parseToneKeywords(mood.getToneKeywords())).orElseGet(List::of),
                 productCount,
                 sheetSyncedAt != null,
+                sheetUrl,
                 sheetSyncedAt
         );
     }
