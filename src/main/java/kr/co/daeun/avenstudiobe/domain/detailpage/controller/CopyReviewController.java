@@ -19,13 +19,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/detail-pages")
-@Tag(name = "Detail Page Copy Review", description = "상세페이지 AI 문구 검수 API")
+@Tag(name = "문구 검수", description = "상세페이지 AI 문구 검수 API")
 public class CopyReviewController {
 
     private final CopyReviewService copyReviewService;
 
     @PostMapping("/review-copy")
-    @Operation(summary = "상세페이지 AI 문구 검수")
+    @Operation(
+            summary = "상세페이지 AI 문구 검수",
+            description = "현재 입력된 문구를 상품·브랜드·배치 이미지 정보와 비교해 검수하고, 슬롯별 최우선 이슈와 수정 제안을 반환합니다."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "문구 검수 성공"),
             @ApiResponse(responseCode = "400", description = "요청 형식·슬롯 정보 오류 또는 상품/asset 접근 불가"),
