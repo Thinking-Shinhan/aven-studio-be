@@ -56,7 +56,7 @@ class CopyReviewResultValidatorTest {
         assertEquals("상품 정보와 달라요.", issues.get(0).issue());
         assertEquals("가장 앞 문구", issues.get(0).targetCopy());
         assertEquals("EYEBROW", issues.get(0).textRole());
-        assertNull(issues.get(0).suggestion());
+        assertEquals("길이가 스무 자를 훨씬 넘는 매우 긴 제안 문구예요.", issues.get(0).suggestion());
         assertNull(issues.get(1).suggestion());
     }
 

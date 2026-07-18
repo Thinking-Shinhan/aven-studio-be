@@ -102,8 +102,7 @@ public class CopyReviewResultValidator {
                                 block.blockOrder(),
                                 slot.slotOrder(),
                                 slot.textRole(),
-                                slot.currentContent(),
-                                slot.recommendedMaxLength()
+                                slot.currentContent()
                         )
                 );
             }
@@ -121,9 +120,6 @@ public class CopyReviewResultValidator {
             invalidReason = "blank";
         } else if (Objects.equals(suggestion, slot.targetCopy())) {
             invalidReason = "same_as_target";
-        } else if (slot.recommendedMaxLength() != null
-                && suggestion.length() > slot.recommendedMaxLength()) {
-            invalidReason = "length_exceeded";
         }
 
         if (invalidReason != null) {
@@ -183,8 +179,7 @@ public class CopyReviewResultValidator {
             Integer blockOrder,
             Integer slotOrder,
             String textRole,
-            String targetCopy,
-            Integer recommendedMaxLength
+            String targetCopy
     ) {
     }
 
