@@ -16,5 +16,6 @@ public class BrandHomeRespDto {
     private List<String> toneKeywords;
     private long productCount;
     private boolean sheetSynced;
+    private String sheetUrl;
     private LocalDateTime sheetSyncedAt;
 }
