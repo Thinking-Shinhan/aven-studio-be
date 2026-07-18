@@ -17,6 +17,9 @@ import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
+
+    long countByBrand_Id(Long brandId);
+
     @Query("""
     SELECT p
     FROM Product p
