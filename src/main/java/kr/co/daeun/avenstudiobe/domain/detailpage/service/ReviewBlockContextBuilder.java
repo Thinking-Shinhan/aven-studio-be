@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewBlockContextBuilder {
 
+    private static final String IMAGE_TEMPLATE_TYPE = "IMAGE";
+
     public List<ReviewBlockContext> build(List<ReviewTemplateBlockReqDto> templateBlocks) {
         List<ReviewTemplateBlockReqDto> sortedBlocks = safeList(templateBlocks).stream()
                 .filter(Objects::nonNull)
@@ -30,11 +32,20 @@ public class ReviewBlockContextBuilder {
         ReviewTemplateBlockReqDto block = sortedBlocks.get(index);
         List<ReviewTextSlotReqDto> textSlots = collectReviewTargets(block);
         List<Long> placedImageAssetIds = collectImageAssetIds(block);
-        List<Long> neighboringImageAssetIds = textSlots.isEmpty()
+        ReviewTemplateBlockReqDto previousBlock = index == 0 ? null : sortedBlocks.get(index - 1);
+        List<Long> previousImageAssetIds = textSlots.isEmpty()
                 || !placedImageAssetIds.isEmpty()
-                || index == 0
+                || previousBlock == null
                 ? List.of()
-                : collectImageAssetIds(sortedBlocks.get(index - 1));
+                : collectImageAssetIds(previousBlock);
+        boolean previousImageBlock = previousBlock != null
+                && IMAGE_TEMPLATE_TYPE.equals(previousBlock.templateType());
+        List<Long> associatedImageAssetIds = previousImageBlock
+                ? previousImageAssetIds
+                : List.of();
+        List<Long> neighboringImageAssetIds = previousImageBlock
+                ? List.of()
+                : previousImageAssetIds;
 
         return new ReviewBlockContext(
                 block.blockOrder(),
@@ -43,6 +54,7 @@ public class ReviewBlockContextBuilder {
                 block.templateType(),
                 textSlots,
                 placedImageAssetIds,
+                associatedImageAssetIds,
                 neighboringImageAssetIds,
                 false
         );

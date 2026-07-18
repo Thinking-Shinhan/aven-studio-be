@@ -50,24 +50,33 @@ class ReviewImageProcessorTest {
     }
 
     @Test
-    void prioritizesPlacedOverEarlierNeighboringImages() throws IOException {
+    void treatsAssociatedAndPlacedImagesAsDirectEvidenceBeforeNeighboringImages() throws IOException {
         properties.setReviewMaxImages(1);
         byte[] png = png(8, 4, false);
-        when(gcsService.download("asset-30.png")).thenReturn(png);
+        when(gcsService.download("asset-20.png")).thenReturn(png);
 
         ReviewImageProcessor.ProcessResult result = processor.process(
                 List.of(
-                        block(2, List.of(), List.of(20L)),
-                        block(3, List.of(30L), List.of())
+                        block(1, List.of(), List.of(), List.of(10L)),
+                        block(2, List.of(), List.of(20L), List.of()),
+                        block(3, List.of(30L), List.of(), List.of())
                 ),
-                List.of(source(20L, "image/png"), source(30L, "image/png"))
+                List.of(
+                        source(10L, "image/png"),
+                        source(20L, "image/png"),
+                        source(30L, "image/png")
+                )
         );
 
-        assertEquals(List.of(30L), result.images().stream().map(ReviewImage::assetId).toList());
+        assertEquals(List.of(20L), result.images().stream().map(ReviewImage::assetId).toList());
         assertEquals(List.of(), result.blocks().get(0).neighboringImageAssetIds());
         assertFalse(result.blocks().get(0).imagesOmitted());
-        assertEquals(List.of(30L), result.blocks().get(1).placedImageAssetIds());
-        verify(gcsService, never()).download("asset-20.png");
+        assertEquals(List.of(20L), result.blocks().get(1).associatedImageAssetIds());
+        assertFalse(result.blocks().get(1).imagesOmitted());
+        assertEquals(List.of(), result.blocks().get(2).placedImageAssetIds());
+        assertTrue(result.blocks().get(2).imagesOmitted());
+        verify(gcsService, never()).download("asset-10.png");
+        verify(gcsService, never()).download("asset-30.png");
     }
 
     @Test
@@ -89,6 +98,26 @@ class ReviewImageProcessorTest {
 
         assertEquals(List.of(10L, 11L), result.images().stream().map(ReviewImage::assetId).toList());
         assertEquals(List.of(10L, 11L), result.blocks().get(0).placedImageAssetIds());
+        assertEquals(List.of(), result.blocks().get(0).neighboringImageAssetIds());
+        assertTrue(result.blocks().get(0).imagesOmitted());
+    }
+
+    @Test
+    void marksOmissionWhenAnAssociatedDirectImageExceedsTheLimit() throws IOException {
+        properties.setReviewMaxImages(1);
+        when(gcsService.download("asset-10.png")).thenReturn(png(8, 4, false));
+
+        ReviewImageProcessor.ProcessResult result = processor.process(
+                List.of(block(1, List.of(), List.of(10L, 11L), List.of(99L))),
+                List.of(
+                        source(10L, "image/png"),
+                        source(11L, "image/png"),
+                        source(99L, "image/png")
+                )
+        );
+
+        assertEquals(List.of(10L), result.images().stream().map(ReviewImage::assetId).toList());
+        assertEquals(List.of(10L), result.blocks().get(0).associatedImageAssetIds());
         assertEquals(List.of(), result.blocks().get(0).neighboringImageAssetIds());
         assertTrue(result.blocks().get(0).imagesOmitted());
     }
@@ -173,6 +202,15 @@ class ReviewImageProcessorTest {
             List<Long> placedImageAssetIds,
             List<Long> neighboringImageAssetIds
     ) {
+        return block(blockOrder, placedImageAssetIds, List.of(), neighboringImageAssetIds);
+    }
+
+    private ReviewBlockContext block(
+            int blockOrder,
+            List<Long> placedImageAssetIds,
+            List<Long> associatedImageAssetIds,
+            List<Long> neighboringImageAssetIds
+    ) {
         return new ReviewBlockContext(
                 blockOrder,
                 "block-" + blockOrder,
@@ -180,6 +218,7 @@ class ReviewImageProcessorTest {
                 "MIXED",
                 List.of(new ReviewTextSlotReqDto("copy", 1, "BODY", 100, "current")),
                 placedImageAssetIds,
+                associatedImageAssetIds,
                 neighboringImageAssetIds,
                 false
         );

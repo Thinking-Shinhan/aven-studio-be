@@ -51,7 +51,8 @@ class CopyReviewPromptBuilderTest {
         assertEquals("Jacket", payload.path("product").path("name").asText());
         assertEquals("폴리에스터", payload.path("product").path("materials").get(0).path("name").asText());
         assertEquals("Aven", payload.path("brand").path("brandName").asText());
-        assertEquals(25L, payload.path("blocks").get(0).path("placedImageAssetIds").get(0).asLong());
+        assertEquals(25L, payload.path("blocks").get(0).path("associatedImageAssetIds").get(0).asLong());
+        assertEquals(30L, payload.path("blocks").get(0).path("neighboringImageAssetIds").get(0).asLong());
 
         JsonNode imageMetadata = payload.path("images").get(0);
         assertEquals(Set.of("assetId", "assetRole", "description"), fieldNames(imageMetadata));
@@ -72,7 +73,10 @@ class CopyReviewPromptBuilderTest {
         assertTrue(prompt.contains("직접 반대되는 경우에만 CONTENT_MISMATCH"));
         assertTrue(prompt.contains("이미지로 확인할 수 없다는 이유만으로 CONTENT_MISMATCH"));
         assertTrue(prompt.contains("placedImageAssetIds"));
+        assertTrue(prompt.contains("associatedImageAssetIds"));
+        assertTrue(prompt.contains("현재 문구와 직접 연결된 근거"));
         assertTrue(prompt.contains("neighboringImageAssetIds"));
+        assertTrue(prompt.contains("페이지 흐름 파악용"));
         assertTrue(prompt.contains("imagesOmitted가 true"));
         assertTrue(prompt.contains("인증, 기능, 효과, 소재"));
         assertTrue(prompt.contains("recommendedMaxLength 이하"));
@@ -113,8 +117,9 @@ class CopyReviewPromptBuilderTest {
                 "template-1",
                 "MIXED",
                 List.of(new ReviewTextSlotReqDto("headline", 1, "HEADLINE", 20, "current")),
-                List.of(25L),
                 List.of(),
+                List.of(25L),
+                List.of(30L),
                 false
         );
         return new CopyReviewContext(
