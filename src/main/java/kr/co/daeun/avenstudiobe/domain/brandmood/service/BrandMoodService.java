@@ -256,12 +256,14 @@ public class BrandMoodService {
                 display에는 internalAnalysis의 의미를 보존하면서 사용자가 빠르게 확인할 수 있는 짧은 표현을 작성한다.
 
                 display 작성 제한:
+                - display는 화면 표시용이므로 긴 설명형 문장보다 짧은 명사구로 작성한다.
                 - brandSummary: 최대 220자
                 - designPhilosophy: 최대 84자
                 - brandTone: 최대 8개, 쉼표와 공백으로 연결했을 때 최대 84자
                 - colorTemperature, saturation, contrast, lighting, surfaceTexture, backgroundMood, composition: 각각 최대 25자
                 - avoidElements: 최대 8개, 쉼표와 공백으로 연결했을 때 최대 100자
                 - customBrandNote: 최대 120자
+                - 특히 composition은 "클린 중앙 구도", "여백 있는 구도", "정돈된 정면 구도"처럼 25자 이하의 짧은 구도 표현만 작성한다.
                 - 확인되지 않은 값은 억지로 채우지 말고 null 또는 빈 배열로 작성한다.
 
                 출력 JSON 스키마:
