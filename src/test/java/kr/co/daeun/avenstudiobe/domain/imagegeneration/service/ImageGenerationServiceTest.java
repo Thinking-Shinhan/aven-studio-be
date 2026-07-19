@@ -613,10 +613,12 @@ class ImageGenerationServiceTest {
         assertTrue(work.tasks().get(0).referenceImages().isEmpty());
         assertTrue(work.tasks().get(0).prompt().contains("MEASUREMENT GUIDE PRODUCT IMAGE"));
         assertTrue(work.tasks().get(0).prompt().contains("상품 중앙 정렬과 외곽 점선 측정선을 사용하는 실측 안내 구도."));
-        assertTrue(work.tasks().get(0).prompt().contains("[MEASUREMENT PARTS TO VISUALIZE]"));
-        assertTrue(work.tasks().get(0).prompt().contains("- 어깨너비"));
-        assertTrue(work.tasks().get(0).prompt().contains("- 총장"));
-        assertTrue(work.tasks().get(0).prompt().contains("Do not render measurement names, labels, numbers, size values, or any text."));
+        assertTrue(work.tasks().get(0).prompt().contains("[INTERNAL MEASUREMENT LINE CONTROL DATA - DO NOT RENDER]"));
+        assertTrue(work.tasks().get(0).prompt().contains("- horizontal shoulder-width guide line across the shoulder endpoints"));
+        assertTrue(work.tasks().get(0).prompt().contains("- vertical body-length guide line from the top shoulder or neckline area to the bottom hem"));
+        assertTrue(work.tasks().get(0).prompt().contains("Do not render Korean text, English text, measurement names, labels, numbers, size values, captions, callouts, or arrows."));
+        assertFalse(work.tasks().get(0).prompt().contains("- 어깨너비"));
+        assertFalse(work.tasks().get(0).prompt().contains("- 총장"));
         assertFalse(work.tasks().get(0).prompt().contains("[SYSTEM INSTRUCTION]"));
         assertFalse(work.tasks().get(0).prompt().contains("[BRAND INSTRUCTION]"));
         assertFalse(work.tasks().get(0).prompt().contains("shotReferenceImage = SHOT_COMPOSITION_REFERENCE"));
