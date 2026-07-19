@@ -475,12 +475,16 @@ public class ImageGenerationService {
 
         return """
                 [MEASUREMENT GUIDE PRODUCT IMAGE]
+<<<<<<< HEAD
                 Create one clean ecommerce measurement-guide product image.
 
                 [PRODUCT ACCURACY REFERENCES]
                 productImages are the only product accuracy references.
                 Use productImages to preserve the actual product category, silhouette, proportions, seams, structure, and visible details.
                 Do not change the product category.
+=======
+                Use productImages as the target product references.
+>>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
 
                 %s
 
@@ -491,11 +495,14 @@ public class ImageGenerationService {
 
                 [USER ADDITIONAL REQUEST]
                 %s
+<<<<<<< HEAD
 
                 [OUTPUT CONDITIONS]
                 The final result must be one complete product-only measurement-guide image.
                 Do not generate a person, hand, body, mannequin, hanger, collage, text, numbers, readable labels, arrows, watermark, or brand overlay.
                 Do not copy any unrelated product design.
+=======
+>>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
                 """.formatted(
                 buildMeasurementGuideReferenceInstruction(referenceAssets),
                 description.trim(),
@@ -524,9 +531,13 @@ public class ImageGenerationService {
         return """
                 [REFERENCE IMAGE ROLE RULES]
                 The attached productImages are provided with explicit input keys.
+<<<<<<< HEAD
                 Interpret productImages only as PRODUCT ACCURACY REFERENCES.
                 They define the final product category, silhouette, proportions, seams, structure, color, material, and visible details.
                 Do not use any measurement-guide template image as an attached visual reference for this request.
+=======
+                Interpret productImages only as the target product references.
+>>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
 
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
