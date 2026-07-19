@@ -86,9 +86,17 @@ public class ImageGenerationJobRespDto {
             case "PENDING" -> "이미지 생성 작업을 준비하고 있습니다.";
             case "PROCESSING" -> "선택한 옵션을 반영해 이미지를 만들고 있어요.";
             case "SUCCEEDED" -> "이미지 생성이 완료되었습니다.";
-            case "FAILED" -> "이미지 생성 중 오류가 발생했습니다.";
+            case "FAILED" -> failureMessage(job);
             default -> "이미지 생성 상태를 확인하고 있습니다.";
         };
+    }
+
+    private static String failureMessage(ImageGenerationJob job) {
+        String errorMessage = job.getErrorMessage();
+        if (errorMessage == null || errorMessage.isBlank()) {
+            return "이미지 생성 중 오류가 발생했습니다.";
+        }
+        return errorMessage;
     }
 
     private static List<ImageGenerationProgressItemRespDto> progressItems(
@@ -124,7 +132,7 @@ public class ImageGenerationJobRespDto {
             return new ImageGenerationProgressItemRespDto(
                     outputIndex,
                     "FAILED",
-                    String.format("이미지 %d장 생성 실패", imageNumber)
+                    String.format("이미지 %d장 생성 실패: %s", imageNumber, failureMessage(job))
             );
         }
         return new ImageGenerationProgressItemRespDto(outputIndex, "PENDING", null);
