@@ -1,0 +1,27 @@
+{
+  "productId": 14,
+  "templateBlocks": [
+    {
+      "blockOrder": 1,
+      "instanceKey": "hero-1",
+      "templateKey": "hero",
+      "templateType": "MIXED",
+      "imageSlots": [
+        {
+          "slotKey": "main-image",
+          "slotOrder": 1,
+          "assetId": 101
+        }
+      ],
+      "textSlots": [
+        {
+          "slotKey": "headline",
+          "slotOrder": 1,
+          "textRole": "HEADLINE",
+          "recommendedMaxLength": 30,
+          "currentContent": "측정에 사용할 실제 문구"
+        }
+      ]
+    }
+  ]
+}

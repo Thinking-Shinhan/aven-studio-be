@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -43,6 +44,7 @@ public class ReviewImageProcessor {
 
     private final GcsService gcsService;
     private final ClaudeProperties claudeProperties;
+    private final MeterRegistry meterRegistry;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ProcessResult process(
@@ -65,7 +67,9 @@ public class ReviewImageProcessor {
                 ));
 
         List<ReviewImage> images = selectedCandidates.stream()
-                .map(candidate -> processImage(candidate.assetId(), sourceByAssetId.get(candidate.assetId())))
+                .map(candidate -> meterRegistry.timer("review.image.single").record(() ->
+                        processImage(candidate.assetId(), sourceByAssetId.get(candidate.assetId()))
+                ))
                 .toList();
 
         return new ProcessResult(updatedBlocks, images);

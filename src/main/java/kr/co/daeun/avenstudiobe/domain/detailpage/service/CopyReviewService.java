@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.AiCopyReviewResponseDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.ClaudeCopyReviewer;
@@ -26,9 +27,14 @@ public class CopyReviewService {
     private final ReviewImageProcessor imageProcessor;
     private final ClaudeCopyReviewer copyReviewer;
     private final CopyReviewResultValidator resultValidator;
+    private final MeterRegistry meterRegistry;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public CopyReviewRespDto review(CopyReviewReqDto request, Authentication authentication) {
+        return meterRegistry.timer("review.total").record(() -> doReview(request, authentication));
+    }
+
+    private CopyReviewRespDto doReview(CopyReviewReqDto request, Authentication authentication) {
         requestValidator.validate(request);
 
         CopyReviewContext loadedContext;
@@ -42,9 +48,8 @@ public class CopyReviewService {
             return new CopyReviewRespDto(request.productId(), List.of());
         }
 
-        ProcessResult processed = imageProcessor.process(
-                loadedContext.blocks(),
-                loadedContext.assetSources()
+        ProcessResult processed = meterRegistry.timer("review.image.pipeline").record(() ->
+                imageProcessor.process(loadedContext.blocks(), loadedContext.assetSources())
         );
         CopyReviewContext reviewContext = new CopyReviewContext(
                 loadedContext.product(),
@@ -53,7 +58,9 @@ public class CopyReviewService {
                 loadedContext.assetSources()
         );
 
-        AiCopyReviewResponseDto aiResponse = copyReviewer.review(reviewContext, processed.images());
+        AiCopyReviewResponseDto aiResponse = meterRegistry.timer("review.claude.call").record(() ->
+                copyReviewer.review(reviewContext, processed.images())
+        );
         List<ReviewIssueDto> issues = resultValidator.validate(reviewContext, aiResponse);
         return new CopyReviewRespDto(request.productId(), issues);
     }
