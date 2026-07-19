@@ -489,20 +489,9 @@ public class ImageGenerationService {
 
         return """
                 [MEASUREMENT GUIDE PRODUCT IMAGE]
-<<<<<<< HEAD
-<<<<<<< HEAD
                 Create one clean ecommerce measurement-guide product image.
-
-                [PRODUCT ACCURACY REFERENCES]
-                productImages are the only product accuracy references.
-                Use productImages to preserve the actual product category, silhouette, proportions, seams, structure, and visible details.
-                Do not change the product category.
-=======
-                Use productImages as the target product references.
->>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
-=======
-                Use productImages as the target product references.
->>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
+                Use productImages only to understand the target product category, outline silhouette, length, proportions, collar, sleeves, hem, opening, seams, and construction.
+                Do not copy product color, fabric color, pattern, logo, graphic, texture, lighting, shadow, or photographic style from productImages.
 
                 %s
 
@@ -512,19 +501,21 @@ public class ImageGenerationService {
                 %s
 
                 %s
-<<<<<<< HEAD
 
-<<<<<<< HEAD
                 [OUTPUT CONDITIONS]
                 The final result must be one complete product-only measurement-guide image.
-                Do not generate a person, hand, body, mannequin, hanger, collage, text, numbers, readable labels, arrows, watermark, or brand overlay.
-                Do not copy any unrelated product design.
-=======
->>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
-=======
+                The final image must contain only:
+                - a pure white solid background
+                - thin black or dark gray garment outline line art
+                - minimal internal construction and seam lines
+                - dashed measurement guide lines
+                - circular endpoint markers
+                Keep the inside of the garment white and unfilled.
+                Do not fill the garment with its real product color.
+                Do not generate realistic fabric, texture, shading, gradient, shadow, dimensional depth, props, logo, pattern, text, numbers, measurement values, labels, captions, arrows, watermark, human, hand, body, mannequin, or hanger.
+
                 [USER ADDITIONAL REQUEST]
                 %s
->>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
                 """.formatted(
                 buildMeasurementGuideReferenceInstruction(referenceAssets),
                 description.trim(),
@@ -554,17 +545,10 @@ public class ImageGenerationService {
         return """
                 [REFERENCE IMAGE ROLE RULES]
                 The attached productImages are provided with explicit input keys.
-<<<<<<< HEAD
-<<<<<<< HEAD
-                Interpret productImages only as PRODUCT ACCURACY REFERENCES.
-                They define the final product category, silhouette, proportions, seams, structure, color, material, and visible details.
+                Interpret productImages only as product structure references.
+                They define the final product category, outline silhouette, proportions, seams, and construction.
+                They must not define the final color, texture, lighting, background, logo, label, pattern, or photographic style.
                 Do not use any measurement-guide template image as an attached visual reference for this request.
-=======
-                Interpret productImages only as the target product references.
->>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
-=======
-                Interpret productImages only as the target product references.
->>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
 
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
@@ -582,19 +566,39 @@ public class ImageGenerationService {
         }
 
         String parts = measurementNames.stream()
-                .map(name -> "- " + name)
+                .map(this::toMeasurementGuideLineInstruction)
+                .distinct()
+                .map(instruction -> "- " + instruction)
                 .toList()
                 .stream()
                 .collect(java.util.stream.Collectors.joining("\n"));
 
         return """
-                [MEASUREMENT PARTS TO VISUALIZE]
-                The product has the following measurement parts in the database:
+                [INTERNAL MEASUREMENT LINE CONTROL DATA - DO NOT RENDER]
+                Use only the following visual guide line types:
                 %s
 
-                Visualize these measurement parts only as dashed guide lines and circular endpoint markers.
-                Do not render measurement names, labels, numbers, size values, or any text.
+                These guide line types are internal control data only.
+                Draw only dashed guide lines and circular endpoint markers at the matching garment positions.
+                Do not render these guide type names as text.
+                Do not render Korean text, English text, measurement names, labels, numbers, size values, captions, callouts, or arrows.
                 """.formatted(parts);
+    }
+
+    private String toMeasurementGuideLineInstruction(String measurementName) {
+        return switch (measurementName) {
+            case "어깨너비" -> "horizontal shoulder-width guide line across the shoulder endpoints";
+            case "총장" -> "vertical body-length guide line from the top shoulder or neckline area to the bottom hem";
+            case "소매길이" -> "sleeve-length guide line along the sleeve direction from shoulder endpoint to sleeve hem";
+            case "가슴단면" -> "horizontal chest-width guide line across the underarm chest area";
+            case "밑단단면", "밑단" -> "horizontal hem-width guide line across the bottom hem";
+            case "허리단면", "허리" -> "horizontal waist-width guide line across the waist area";
+            case "엉덩이단면", "힙단면", "힙" -> "horizontal hip-width guide line across the hip area";
+            case "허벅지단면", "허벅지" -> "horizontal thigh-width guide line across the thigh area";
+            case "밑위" -> "vertical rise guide line around the crotch and waist area";
+            case "총기장", "바지총장" -> "vertical outseam-length guide line from waist to leg hem";
+            default -> "appropriate dashed measurement guide line for one visible garment dimension";
+        };
     }
 
     private List<String> findMeasurementNames(Long productId) {
