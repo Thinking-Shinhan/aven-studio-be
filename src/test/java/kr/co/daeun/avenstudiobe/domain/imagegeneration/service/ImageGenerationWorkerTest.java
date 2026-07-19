@@ -97,6 +97,46 @@ class ImageGenerationWorkerTest {
     }
 
     @Test
+    void retriesTemporaryGoogleFailureAndSavesResult() {
+        Product product = mock(Product.class);
+        Asset asset = mock(Asset.class);
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(provider.generate(anyString(), any(), anyString(), anyString()))
+                .thenThrow(new IllegalStateException(
+                        "Google AI API 요청에 실패했습니다. status=503, response=UNAVAILABLE"
+                ))
+                .thenReturn(generatedImage());
+        when(assetService.saveGeneratedImage(any(), anyString(), any(), anyLong(), anyString(), anyString(), anyString()))
+                .thenReturn(asset);
+        ImageGenerationWorker worker = worker(directExecutor);
+
+        worker.submit(work("first"));
+
+        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
+        verify(progressService).recordGeneratedResult(10L, asset, 0);
+        verify(progressService).markSucceeded(anyLong(), anyInt());
+        verify(progressService, never()).markFailed(anyLong(), anyString(), anyInt());
+    }
+
+    @Test
+    void storesSafeFailureCodeForRepeatedTemporaryGoogleFailure() {
+        when(provider.generate(anyString(), any(), anyString(), anyString()))
+                .thenThrow(new IllegalStateException(
+                        "Google AI API 요청에 실패했습니다. status=503, response=UNAVAILABLE"
+                ));
+        ImageGenerationWorker worker = worker(directExecutor);
+
+        worker.submit(work("first"));
+
+        verify(provider, times(2)).generate(anyString(), any(), eq("3:4"), anyString());
+        verify(progressService).markFailed(
+                eq(10L),
+                eq("[GOOGLE_API_TEMPORARY_UNAVAILABLE] Google AI 이미지 생성 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요."),
+                anyInt()
+        );
+    }
+
+    @Test
     void returnsQueueFullWhenJobExecutorRejectsTask() {
         TaskExecutor rejectingExecutor = task -> {
             throw new TaskRejectedException("queue full");
