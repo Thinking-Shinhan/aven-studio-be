@@ -197,6 +197,25 @@ public class BrandMoodService {
                 외부 웹사이트를 직접 탐색했다고 가정하지 않는다.
                 반드시 JSON 객체만 출력한다. 설명, 마크다운, 코드블록을 출력하지 않는다.
 
+                표시 화면에 바로 노출되는 값이므로 아래 글자 수 제한을 반드시 지킨다.
+                글자 수는 한글, 영문, 숫자, 공백, 문장부호를 모두 포함해 계산한다.
+                제한을 넘길 것 같으면 긴 문장이 아니라 짧은 명사구로 작성한다.
+                예: composition은 "클린 중앙 구도", "여백 있는 구도", "정돈된 정면 구도"처럼 짧게 쓴다.
+
+                글자 수 제한:
+                - brandSummary: 220자 이하
+                - designPhilosophy: 84자 이하
+                - brandTone: 최대 8개, 전체를 ", "로 연결했을 때 84자 이하
+                - colorTemperature: 25자 이하
+                - saturation: 25자 이하
+                - contrast: 25자 이하
+                - lighting: 25자 이하
+                - surfaceTexture: 25자 이하
+                - backgroundMood: 25자 이하
+                - composition: 25자 이하
+                - avoidElements: 최대 8개, 전체를 ", "로 연결했을 때 100자 이하
+                - customBrandNote: 120자 이하
+
                 출력 JSON 스키마:
                 {
                   "brandSummary": "string|null",
