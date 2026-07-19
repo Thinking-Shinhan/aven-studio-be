@@ -278,40 +278,78 @@ public class ImageGenerationService {
         String aspectRatio = resolveAspectRatio(request.getUserOptionsJson());
         JsonNode referenceRoot = parseReferenceJson(request.getReferenceJson());
         List<Long> shotReferenceIds = extractShotReferenceIds(referenceRoot, request.getCutType());
+        Long singleShotReferenceId = extractSingleShotReferenceId(referenceRoot, request.getCutType());
         int requestedCount = resolveRequestedCount(request.getRequestedCount(), shotReferenceIds);
         List<ReferenceAssetInput> commonReferences = resolveReferenceAssets(referenceRoot, brandId);
 
         if (shotReferenceIds.isEmpty()) {
-            String prompt = compilePrompt(
-                    brandMood,
-                    request.getCutType(),
-                    request.getPrompt(),
-                    request.getUserOptionsJson(),
-                    commonReferences
-            );
+            ReferenceAsset shotReference = singleShotReferenceId == null
+                    ? null
+                    : findActiveReferenceAsset(singleShotReferenceId);
+            List<ReferenceAssetInput> promptReferences = isMeasurementGuide(shotReference)
+                    ? productAccuracyReferencesOnly(commonReferences)
+                    : commonReferences;
+            String prompt = isMeasurementGuide(shotReference)
+                    ? compileMeasurementGuidePrompt(request.getPrompt(), request.getUserOptionsJson(), promptReferences, shotReference)
+                    : compilePrompt(
+                            brandMood,
+                            request.getCutType(),
+                            request.getPrompt(),
+                            request.getUserOptionsJson(),
+                            commonReferences
+                    );
             List<GenerationTask> tasks = new ArrayList<>();
             for (int i = 0; i < requestedCount; i++) {
-                tasks.add(new GenerationTask(prompt, commonReferences, null));
+                tasks.add(new GenerationTask(prompt, promptReferences, null));
             }
             return new GenerationPlan(tasks, prompt, requestedCount, false, aspectRatio);
         }
 
         List<GenerationTask> tasks = new ArrayList<>();
         for (Long shotReferenceId : shotReferenceIds) {
+            ReferenceAsset shotReference = findActiveReferenceAsset(shotReferenceId);
             List<ReferenceAssetInput> taskReferences = new ArrayList<>(commonReferences);
-            addServiceReference(taskReferences, "shotReferenceImage", shotReferenceId);
+            if (!isMeasurementGuide(shotReference)) {
+                addServiceReference(taskReferences, "shotReferenceImage", shotReferenceId);
+            }
             validateReferenceCount(taskReferences);
-            String prompt = compilePrompt(
-                    brandMood,
-                    request.getCutType(),
-                    request.getPrompt(),
-                    request.getUserOptionsJson(),
-                    taskReferences
-            );
+            String prompt = isMeasurementGuide(shotReference)
+                    ? compileMeasurementGuidePrompt(
+                            request.getPrompt(),
+                            request.getUserOptionsJson(),
+                            productAccuracyReferencesOnly(taskReferences),
+                            shotReference
+                    )
+                    : compilePrompt(
+                            brandMood,
+                            request.getCutType(),
+                            request.getPrompt(),
+                            request.getUserOptionsJson(),
+                            taskReferences
+                    );
             tasks.add(new GenerationTask(prompt, List.copyOf(taskReferences), shotReferenceId));
         }
 
         return new GenerationPlan(tasks, buildStoredPrompt(tasks), requestedCount, true, aspectRatio);
+    }
+
+    private Long extractSingleShotReferenceId(JsonNode referenceRoot, String cutType) {
+        if (referenceRoot == null || referenceRoot.isMissingNode() || referenceRoot.isNull()) {
+            return null;
+        }
+
+        JsonNode singleNode = referenceRoot.path("shotReferenceId");
+        if (singleNode.isMissingNode() || singleNode.isNull()) {
+            return null;
+        }
+
+        if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            throw new IllegalArgumentException("shotReferenceId는 PRODUCT_CUT에서만 사용할 수 있습니다.");
+        }
+        if (!singleNode.isNumber()) {
+            throw new IllegalArgumentException("shotReferenceId에는 숫자 ID만 입력할 수 있습니다.");
+        }
+        return singleNode.asLong();
     }
 
     private List<Long> extractShotReferenceIds(JsonNode referenceRoot, String cutType) {
@@ -418,6 +456,81 @@ public class ImageGenerationService {
                 buildUserOptionsInstruction(cutType, userOptions),
                 userPrompt.trim()
         );
+    }
+
+    private String compileMeasurementGuidePrompt(
+            String userPrompt,
+            JsonNode userOptions,
+            List<ReferenceAssetInput> referenceAssets,
+            ReferenceAsset shotReference
+    ) {
+        String description = shotReference == null ? null : shotReference.getDescription();
+        if (description == null || description.isBlank()) {
+            throw new IllegalArgumentException("실측가이드 템플릿 description이 비어 있습니다.");
+        }
+
+        String additionalRequest = userPrompt == null || userPrompt.isBlank() || "_".equals(userPrompt.trim())
+                ? "No additional user request."
+                : userPrompt.trim();
+
+        return """
+                [MEASUREMENT GUIDE PRODUCT IMAGE]
+                Create one clean ecommerce measurement-guide product image.
+
+                [PRODUCT ACCURACY REFERENCES]
+                productImages are the only product accuracy references.
+                Use productImages to preserve the actual product category, silhouette, proportions, seams, structure, and visible details.
+                Do not change the product category.
+
+                %s
+
+                [MEASUREMENT GUIDE DIRECTION]
+                %s
+
+                %s
+
+                [USER ADDITIONAL REQUEST]
+                %s
+
+                [OUTPUT CONDITIONS]
+                The final result must be one complete product-only measurement-guide image.
+                Do not generate a person, hand, body, mannequin, hanger, collage, text, numbers, readable labels, arrows, watermark, or brand overlay.
+                Do not copy any unrelated product design.
+                """.formatted(
+                buildMeasurementGuideReferenceInstruction(referenceAssets),
+                description.trim(),
+                buildUserOptionsInstruction("PRODUCT_CUT", userOptions),
+                additionalRequest
+        );
+    }
+
+    private String buildMeasurementGuideReferenceInstruction(List<ReferenceAssetInput> referenceAssets) {
+        StringBuilder keys = new StringBuilder();
+        if (referenceAssets != null) {
+            for (ReferenceAssetInput referenceAsset : referenceAssets) {
+                keys.append("- ")
+                        .append(referenceAsset.key())
+                        .append(" = ")
+                        .append(referenceAsset.sourceLabel())
+                        .append("\n");
+            }
+        }
+
+        String attachedKeys = keys.toString().trim();
+        if (attachedKeys.isBlank()) {
+            attachedKeys = "No product reference images are attached.";
+        }
+
+        return """
+                [REFERENCE IMAGE ROLE RULES]
+                The attached productImages are provided with explicit input keys.
+                Interpret productImages only as PRODUCT ACCURACY REFERENCES.
+                They define the final product category, silhouette, proportions, seams, structure, color, material, and visible details.
+                Do not use any measurement-guide template image as an attached visual reference for this request.
+
+                [ATTACHED REFERENCE IMAGE KEYS]
+                %s
+                """.formatted(attachedKeys);
     }
 
     private String buildUserOptionsInstruction(String cutType, JsonNode userOptions) {
@@ -807,14 +920,7 @@ public class ImageGenerationService {
     }
 
     private void addServiceReference(List<ReferenceAssetInput> references, String key, Long referenceAssetId) {
-        ReferenceAsset referenceAsset = referenceAssetRepository.findById(referenceAssetId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "서비스 레퍼런스 이미지를 찾을 수 없습니다. referenceAssetId=" + referenceAssetId
-                ));
-
-        if (!Boolean.TRUE.equals(referenceAsset.getActive())) {
-            throw new IllegalArgumentException("비활성 서비스 레퍼런스 이미지입니다. referenceAssetId=" + referenceAssetId);
-        }
+        ReferenceAsset referenceAsset = findActiveReferenceAsset(referenceAssetId);
 
         references.add(new ReferenceAssetInput(
                 key,
@@ -823,6 +929,39 @@ public class ImageGenerationService {
                 readReferenceAssetBytes(referenceAsset),
                 referenceAsset.getContentType()
         ));
+    }
+
+    private ReferenceAsset findActiveReferenceAsset(Long referenceAssetId) {
+        ReferenceAsset referenceAsset = referenceAssetRepository.findById(referenceAssetId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "서비스 레퍼런스 이미지를 찾을 수 없습니다. referenceAssetId=" + referenceAssetId
+                ));
+
+        if (!Boolean.TRUE.equals(referenceAsset.getActive())) {
+            throw new IllegalArgumentException("비활성 서비스 레퍼런스 이미지입니다. referenceAssetId=" + referenceAssetId);
+        }
+        return referenceAsset;
+    }
+
+    private boolean isMeasurementGuide(ReferenceAsset referenceAsset) {
+        if (referenceAsset == null) {
+            return false;
+        }
+
+        String referenceKey = normalizeValue(referenceAsset.getReferenceKey());
+        return "REF_PRODUCT_TEMPLATE_MEASUREMENT_GUIDE".equals(referenceKey)
+                || "REF_ACCESSORY_TEMPLATE_MEASUREMENT_GUIDE".equals(referenceKey)
+                || "REF_SHOT_TEMPLATE_12".equals(referenceKey);
+    }
+
+    private List<ReferenceAssetInput> productAccuracyReferencesOnly(List<ReferenceAssetInput> references) {
+        if (references == null || references.isEmpty()) {
+            return List.of();
+        }
+
+        return references.stream()
+                .filter(reference -> reference.key().startsWith("productImages"))
+                .toList();
     }
 
     private void validateReferenceCount(List<ReferenceAssetInput> references) {
@@ -1109,6 +1248,20 @@ public class ImageGenerationService {
             case "SIDE" -> "SIDE_VIEW";
             case "DETAIL", "LOGO", "CONSTRUCTION" -> "DETAIL_CLOSEUP";
             case "FABRIC" -> "FABRIC_MACRO";
+            case "REF_PRODUCT_TEMPLATE_FRONT", "REF_ACCESSORY_TEMPLATE_FRONT" -> "FRONT_VIEW";
+            case "REF_PRODUCT_TEMPLATE_THREE_QUARTER", "REF_ACCESSORY_TEMPLATE_THREE_QUARTER" -> "THREE_QUARTER_VIEW";
+            case "REF_PRODUCT_TEMPLATE_SIDE", "REF_ACCESSORY_TEMPLATE_SIDE" -> "SIDE_VIEW";
+            case "REF_PRODUCT_TEMPLATE_BACK", "REF_ACCESSORY_TEMPLATE_BACK" -> "BACK_VIEW";
+            case "REF_PRODUCT_TEMPLATE_FLAT_LAY" -> "FLAT_LAY";
+            case "REF_PRODUCT_TEMPLATE_GHOST_MANNEQUIN" -> "GHOST_MANNEQUIN";
+            case "REF_PRODUCT_TEMPLATE_FOLDING" -> "FOLDING";
+            case "REF_PRODUCT_TEMPLATE_HANGING" -> "HANGING";
+            case "REF_PRODUCT_TEMPLATE_FABRIC_MACRO", "REF_ACCESSORY_TEMPLATE_FABRIC_MACRO" -> "FABRIC_MACRO";
+            case "REF_PRODUCT_TEMPLATE_LOGO_DETAIL", "REF_ACCESSORY_TEMPLATE_LOGO_DETAIL" -> "LOGO_DETAIL";
+            case "REF_PRODUCT_TEMPLATE_STITCH_DETAIL", "REF_ACCESSORY_TEMPLATE_STITCH_DETAIL" -> "STITCH_DETAIL";
+            case "REF_PRODUCT_TEMPLATE_MEASUREMENT_GUIDE",
+                 "REF_ACCESSORY_TEMPLATE_MEASUREMENT_GUIDE",
+                 "REF_SHOT_TEMPLATE_12" -> "MEASUREMENT_GUIDE";
             default -> shotReferenceKey;
         };
     }

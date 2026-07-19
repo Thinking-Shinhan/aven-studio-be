@@ -24,7 +24,7 @@ public class Asset {
     @Column(nullable = false, length = 30)
     private String type;
 
-    @Column(name = "asset_role", length = 30)
+    @Column(name = "asset_role", length = 100)
     private String assetRole;
 
     @Column(name = "file_url", nullable = false, length = 500)

@@ -516,6 +516,83 @@ class ImageGenerationServiceTest {
         assertEquals(5, response.getProgressPercent());
     }
 
+    @Test
+    void measurementGuideUsesDescriptionPromptWithoutShotReferenceImage() throws Exception {
+        ImageGenerationJobRepository jobRepository = mock(ImageGenerationJobRepository.class);
+        ImageGenerationResultRepository resultRepository = mock(ImageGenerationResultRepository.class);
+        ProductRepository productRepository = mock(ProductRepository.class);
+        BrandMoodRepository brandMoodRepository = mock(BrandMoodRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
+        UsersRepository usersRepository = mock(UsersRepository.class);
+        ImageGenerationWorker imageGenerationWorker = mock(ImageGenerationWorker.class);
+        GcsService gcsService = mock(GcsService.class);
+        GoogleAiImageProvider imageProvider = mock(GoogleAiImageProvider.class);
+
+        ImageGenerationService measurementGuideService = new ImageGenerationService(
+                jobRepository,
+                resultRepository,
+                productRepository,
+                brandMoodRepository,
+                assetRepository,
+                referenceAssetRepository,
+                usersRepository,
+                imageGenerationWorker,
+                gcsService,
+                imageProvider
+        );
+        Brand brand = mock(Brand.class);
+        User user = mock(User.class);
+        Product product = mock(Product.class);
+        BrandMood brandMood = mock(BrandMood.class);
+        ReferenceAsset measurementGuide = mock(ReferenceAsset.class);
+        when(brand.getId()).thenReturn(1L);
+        when(user.getBrand()).thenReturn(brand);
+        when(usersRepository.findByLoginId("tester")).thenReturn(Optional.of(user));
+        when(productRepository.findByIdAndBrand_Id(1L, 1L)).thenReturn(Optional.of(product));
+        when(brandMoodRepository.findTopByBrandIdAndActiveTrueOrderByVersionDesc(1L))
+                .thenReturn(Optional.of(brandMood));
+        when(brandMood.getId()).thenReturn(1L);
+        when(brandMood.getBrandInstruction()).thenReturn("Keep the brand mood consistent.");
+        when(imageProvider.getImageModel()).thenReturn("gemini-test-image");
+        when(measurementGuide.getId()).thenReturn(86L);
+        when(measurementGuide.getActive()).thenReturn(true);
+        when(measurementGuide.getReferenceKey()).thenReturn("REF_PRODUCT_TEMPLATE_MEASUREMENT_GUIDE");
+        when(measurementGuide.getDescription()).thenReturn("상품 중앙 정렬과 외곽 점선 측정선을 사용하는 실측 안내 구도.");
+        when(referenceAssetRepository.findById(86L)).thenReturn(Optional.of(measurementGuide));
+        when(jobRepository.save(any(ImageGenerationJob.class))).thenAnswer(invocation -> {
+            ImageGenerationJob job = invocation.getArgument(0);
+            if (job.getId() == null) {
+                setField(job, "id", 101L);
+            }
+            return job;
+        });
+        ImageGenerationJobCreateReqDto request = new ImageGenerationJobCreateReqDto();
+        request.setProductId(1L);
+        request.setCutType("PRODUCT_CUT");
+        request.setPrompt("_");
+        request.setUserOptionsJson(objectMapper.readTree("""
+                {"aspectRatio":"RATIO_3_4"}
+                """));
+        request.setReferenceJson(objectMapper.readTree("""
+                {"shotReferenceIds":[86]}
+                """));
+
+        measurementGuideService.createJob(request, "tester");
+
+        ArgumentCaptor<ImageGenerationWork> workCaptor = ArgumentCaptor.forClass(ImageGenerationWork.class);
+        verify(imageGenerationWorker).submit(workCaptor.capture());
+
+        ImageGenerationWork work = workCaptor.getValue();
+        assertEquals(1, work.tasks().size());
+        assertTrue(work.tasks().get(0).referenceImages().isEmpty());
+        assertTrue(work.tasks().get(0).prompt().contains("MEASUREMENT GUIDE PRODUCT IMAGE"));
+        assertTrue(work.tasks().get(0).prompt().contains("상품 중앙 정렬과 외곽 점선 측정선을 사용하는 실측 안내 구도."));
+        assertFalse(work.tasks().get(0).prompt().contains("[SYSTEM INSTRUCTION]"));
+        assertFalse(work.tasks().get(0).prompt().contains("[BRAND INSTRUCTION]"));
+        assertFalse(work.tasks().get(0).prompt().contains("shotReferenceImage = SHOT_COMPOSITION_REFERENCE"));
+    }
+
     private void invokeMetadataBuilder(String methodName, JsonNode emptyJson) throws Throwable {
         Method method = ImageGenerationService.class.getDeclaredMethod(methodName, JsonNode.class, JsonNode.class);
         method.setAccessible(true);
