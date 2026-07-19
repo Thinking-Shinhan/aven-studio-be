@@ -20,8 +20,19 @@ $metricNames = @(
     "review.image.single",
     "review.claude.call"
 )
+$baseUri = [Uri]$BaseUrl
+$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
+$cookie = New-Object System.Net.Cookie(
+    "accessToken",
+    $Token,
+    "/",
+    $baseUri.Host
+)
+
+$session.Cookies.Add($cookie)
+
 $headers = @{
-    Cookie = "accessToken=$Token"
     "Content-Type" = "application/json"
 }
 $resolvedRequestFile = (Resolve-Path -LiteralPath $RequestFile).Path
