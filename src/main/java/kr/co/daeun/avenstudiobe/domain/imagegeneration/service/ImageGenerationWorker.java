@@ -17,12 +17,15 @@ import java.util.Locale;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
 public class ImageGenerationWorker {
 
     private static final String GENERATION_FAILED_MESSAGE = "이미지 생성 중 오류가 발생했습니다.";
+    private static final int MAX_GOOGLE_GENERATION_ATTEMPTS = 2;
+    private static final long GOOGLE_RETRY_DELAY_MILLIS = 800L;
 
     private final GoogleAiImageProvider imageProvider;
     private final AspectRatioImageCropper imageCropper;
@@ -104,6 +107,10 @@ public class ImageGenerationWorker {
         if (containsAny(messages, "status=429", "resource_exhausted", "quota")) {
             return "[GOOGLE_API_QUOTA_EXCEEDED] Google AI 사용량 한도를 초과했습니다.";
         }
+        if (containsAny(messages, "status=500", "status=502", "status=503", "status=504",
+                "unavailable", "overloaded", "temporarily unavailable")) {
+            return "[GOOGLE_API_TEMPORARY_UNAVAILABLE] Google AI 이미지 생성 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요.";
+        }
         if (containsAny(messages, "status=401", "status=403", "permission_denied", "api key")) {
             return "[GOOGLE_API_AUTH_FAILED] Google AI 인증 또는 모델 사용 권한을 확인해주세요.";
         }
@@ -183,12 +190,7 @@ public class ImageGenerationWorker {
                 task.referenceImages().size()
         );
 
-        GoogleAiImageProvider.GeneratedImage generatedImage = imageProvider.generate(
-                task.prompt(),
-                task.referenceImages(),
-                task.aspectRatio(),
-                task.finalInstruction()
-        );
+        GoogleAiImageProvider.GeneratedImage generatedImage = generateWithRetry(work, task);
         AspectRatioImageCropper.CropResult cropResult =
                 imageCropper.cropToAspectRatio(generatedImage, task.aspectRatio());
 
@@ -214,6 +216,79 @@ public class ImageGenerationWorker {
             );
         }
         return cropResult.image();
+    }
+
+    private GoogleAiImageProvider.GeneratedImage generateWithRetry(
+            ImageGenerationWork work,
+            ImageGenerationWork.Task task
+    ) {
+        RuntimeException lastError = null;
+
+        for (int attempt = 1; attempt <= MAX_GOOGLE_GENERATION_ATTEMPTS; attempt++) {
+            try {
+                staggerFirstAttempt(task, attempt);
+                return imageProvider.generate(
+                        task.prompt(),
+                        task.referenceImages(),
+                        task.aspectRatio(),
+                        task.finalInstruction()
+                );
+            } catch (RuntimeException e) {
+                lastError = e;
+                if (!isRetryableGoogleFailure(e) || attempt == MAX_GOOGLE_GENERATION_ATTEMPTS) {
+                    throw e;
+                }
+
+                long delayMillis = GOOGLE_RETRY_DELAY_MILLIS * attempt;
+                log.warn(
+                        "Google AI 이미지 생성 재시도 예정: jobId={}, outputIndex={}, attempt={}, delayMillis={}, cause={}",
+                        work.jobId(),
+                        task.outputIndex(),
+                        attempt + 1,
+                        delayMillis,
+                        e.getMessage()
+                );
+                sleep(delayMillis);
+            }
+        }
+
+        throw lastError == null ? new IllegalStateException("Google AI 이미지 생성에 실패했습니다.") : lastError;
+    }
+
+    private void staggerFirstAttempt(ImageGenerationWork.Task task, int attempt) {
+        if (attempt > 1 || task.outputIndex() <= 0) {
+            return;
+        }
+        sleep(Math.min(900L, task.outputIndex() * 250L));
+    }
+
+    private boolean isRetryableGoogleFailure(Throwable error) {
+        String messages = collectFailureMessages(List.of(error));
+        return containsAny(messages,
+                "status=429",
+                "status=500",
+                "status=502",
+                "status=503",
+                "status=504",
+                "resource_exhausted",
+                "quota",
+                "unavailable",
+                "overloaded",
+                "temporarily unavailable",
+                "resourceaccessexception",
+                "readtimeoutexception",
+                "connection",
+                "timed out"
+        );
+    }
+
+    private void sleep(long millis) {
+        try {
+            TimeUnit.MILLISECONDS.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("이미지 생성 재시도 대기 중 인터럽트가 발생했습니다.", e);
+        }
     }
 
     private Throwable unwrap(Throwable error) {

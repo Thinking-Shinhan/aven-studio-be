@@ -66,5 +66,5 @@ image-generation:
     max-size: ${IMAGE_GENERATION_JOB_MAX_SIZE:2}
     queue-capacity: ${IMAGE_GENERATION_JOB_QUEUE_CAPACITY:20}
   task-executor:
-    pool-size: ${IMAGE_GENERATION_TASK_POOL_SIZE:4}
+    pool-size: ${IMAGE_GENERATION_TASK_POOL_SIZE:2}
     queue-capacity: ${IMAGE_GENERATION_TASK_QUEUE_CAPACITY:100}
