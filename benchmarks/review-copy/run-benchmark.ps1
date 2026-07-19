@@ -21,7 +21,7 @@ $metricNames = @(
     "review.claude.call"
 )
 $headers = @{
-    Authorization = "Bearer $Token"
+    Cookie = "accessToken=$Token"
     "Content-Type" = "application/json"
 }
 $resolvedRequestFile = (Resolve-Path -LiteralPath $RequestFile).Path
