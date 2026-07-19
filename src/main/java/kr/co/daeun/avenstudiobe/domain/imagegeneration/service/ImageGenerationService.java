@@ -15,7 +15,11 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGeneratio
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationResultRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Size;
+import kr.co.daeun.avenstudiobe.domain.product.entity.SizeMeasurement;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.product.repository.SizeMeasurementRepository;
+import kr.co.daeun.avenstudiobe.domain.product.repository.SizeRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
@@ -47,6 +51,8 @@ public class ImageGenerationService {
     private final BrandMoodRepository brandMoodRepository;
     private final AssetRepository assetRepository;
     private final ReferenceAssetRepository referenceAssetRepository;
+    private final SizeRepository sizeRepository;
+    private final SizeMeasurementRepository sizeMeasurementRepository;
     private final UsersRepository usersRepository;
     private final ImageGenerationWorker imageGenerationWorker;
     private final GcsService gcsService;
@@ -290,7 +296,13 @@ public class ImageGenerationService {
                     ? productAccuracyReferencesOnly(commonReferences)
                     : commonReferences;
             String prompt = isMeasurementGuide(shotReference)
-                    ? compileMeasurementGuidePrompt(request.getPrompt(), request.getUserOptionsJson(), promptReferences, shotReference)
+                    ? compileMeasurementGuidePrompt(
+                            request.getProductId(),
+                            request.getPrompt(),
+                            request.getUserOptionsJson(),
+                            promptReferences,
+                            shotReference
+                    )
                     : compilePrompt(
                             brandMood,
                             request.getCutType(),
@@ -315,6 +327,7 @@ public class ImageGenerationService {
             validateReferenceCount(taskReferences);
             String prompt = isMeasurementGuide(shotReference)
                     ? compileMeasurementGuidePrompt(
+                            request.getProductId(),
                             request.getPrompt(),
                             request.getUserOptionsJson(),
                             productAccuracyReferencesOnly(taskReferences),
@@ -459,6 +472,7 @@ public class ImageGenerationService {
     }
 
     private String compileMeasurementGuidePrompt(
+            Long productId,
             String userPrompt,
             JsonNode userOptions,
             List<ReferenceAssetInput> referenceAssets,
@@ -476,6 +490,7 @@ public class ImageGenerationService {
         return """
                 [MEASUREMENT GUIDE PRODUCT IMAGE]
 <<<<<<< HEAD
+<<<<<<< HEAD
                 Create one clean ecommerce measurement-guide product image.
 
                 [PRODUCT ACCURACY REFERENCES]
@@ -485,6 +500,9 @@ public class ImageGenerationService {
 =======
                 Use productImages as the target product references.
 >>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
+=======
+                Use productImages as the target product references.
+>>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
 
                 %s
 
@@ -493,19 +511,24 @@ public class ImageGenerationService {
 
                 %s
 
-                [USER ADDITIONAL REQUEST]
                 %s
 <<<<<<< HEAD
 
+<<<<<<< HEAD
                 [OUTPUT CONDITIONS]
                 The final result must be one complete product-only measurement-guide image.
                 Do not generate a person, hand, body, mannequin, hanger, collage, text, numbers, readable labels, arrows, watermark, or brand overlay.
                 Do not copy any unrelated product design.
 =======
 >>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
+=======
+                [USER ADDITIONAL REQUEST]
+                %s
+>>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
                 """.formatted(
                 buildMeasurementGuideReferenceInstruction(referenceAssets),
                 description.trim(),
+                buildMeasurementPartsInstruction(productId),
                 buildUserOptionsInstruction("PRODUCT_CUT", userOptions),
                 additionalRequest
         );
@@ -532,16 +555,68 @@ public class ImageGenerationService {
                 [REFERENCE IMAGE ROLE RULES]
                 The attached productImages are provided with explicit input keys.
 <<<<<<< HEAD
+<<<<<<< HEAD
                 Interpret productImages only as PRODUCT ACCURACY REFERENCES.
                 They define the final product category, silhouette, proportions, seams, structure, color, material, and visible details.
                 Do not use any measurement-guide template image as an attached visual reference for this request.
 =======
                 Interpret productImages only as the target product references.
 >>>>>>> c952fec (fix: Simplify measurement guide product cut prompt)
+=======
+                Interpret productImages only as the target product references.
+>>>>>>> 9d74467 (fix: Reflect measurement parts in guide prompt)
 
                 [ATTACHED REFERENCE IMAGE KEYS]
                 %s
                 """.formatted(attachedKeys);
+    }
+
+    private String buildMeasurementPartsInstruction(Long productId) {
+        List<String> measurementNames = findMeasurementNames(productId);
+        if (measurementNames.isEmpty()) {
+            return """
+                    [MEASUREMENT PARTS TO VISUALIZE]
+                    No product-specific measurement parts are available in the database.
+                    Use only the measurement guide direction above.
+                    """;
+        }
+
+        String parts = measurementNames.stream()
+                .map(name -> "- " + name)
+                .toList()
+                .stream()
+                .collect(java.util.stream.Collectors.joining("\n"));
+
+        return """
+                [MEASUREMENT PARTS TO VISUALIZE]
+                The product has the following measurement parts in the database:
+                %s
+
+                Visualize these measurement parts only as dashed guide lines and circular endpoint markers.
+                Do not render measurement names, labels, numbers, size values, or any text.
+                """.formatted(parts);
+    }
+
+    private List<String> findMeasurementNames(Long productId) {
+        if (productId == null) {
+            return List.of();
+        }
+
+        List<Size> sizes = sizeRepository.findByProductIdOrderByIdAsc(productId);
+        if (sizes.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> sizeIds = sizes.stream()
+                .map(Size::getId)
+                .toList();
+
+        return sizeMeasurementRepository.findBySizeIdInOrderByIdAsc(sizeIds).stream()
+                .map(SizeMeasurement::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
     }
 
     private String buildUserOptionsInstruction(String cutType, JsonNode userOptions) {
