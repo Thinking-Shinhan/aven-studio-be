@@ -12,7 +12,11 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGeneratio
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ImageGenerationResultRepository;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
 import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Size;
+import kr.co.daeun.avenstudiobe.domain.product.entity.SizeMeasurement;
 import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.product.repository.SizeMeasurementRepository;
+import kr.co.daeun.avenstudiobe.domain.product.repository.SizeRepository;
 import kr.co.daeun.avenstudiobe.domain.user.entity.User;
 import kr.co.daeun.avenstudiobe.domain.user.repository.UsersRepository;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
@@ -47,6 +51,8 @@ import static org.mockito.Mockito.when;
 class ImageGenerationServiceTest {
 
     private final ImageGenerationService service = new ImageGenerationService(
+            null,
+            null,
             null,
             null,
             null,
@@ -307,6 +313,8 @@ class ImageGenerationServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 null
         );
         JsonNode userOptions = objectMapper.readTree("""
@@ -418,6 +426,8 @@ class ImageGenerationServiceTest {
         BrandMoodRepository brandMoodRepository = mock(BrandMoodRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
         ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
+        SizeRepository sizeRepository = mock(SizeRepository.class);
+        SizeMeasurementRepository sizeMeasurementRepository = mock(SizeMeasurementRepository.class);
         UsersRepository usersRepository = mock(UsersRepository.class);
         ImageGenerationWorker imageGenerationWorker = mock(ImageGenerationWorker.class);
         GcsService gcsService = mock(GcsService.class);
@@ -430,6 +440,8 @@ class ImageGenerationServiceTest {
                 brandMoodRepository,
                 assetRepository,
                 referenceAssetRepository,
+                sizeRepository,
+                sizeMeasurementRepository,
                 usersRepository,
                 imageGenerationWorker,
                 gcsService,
@@ -524,6 +536,8 @@ class ImageGenerationServiceTest {
         BrandMoodRepository brandMoodRepository = mock(BrandMoodRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
         ReferenceAssetRepository referenceAssetRepository = mock(ReferenceAssetRepository.class);
+        SizeRepository sizeRepository = mock(SizeRepository.class);
+        SizeMeasurementRepository sizeMeasurementRepository = mock(SizeMeasurementRepository.class);
         UsersRepository usersRepository = mock(UsersRepository.class);
         ImageGenerationWorker imageGenerationWorker = mock(ImageGenerationWorker.class);
         GcsService gcsService = mock(GcsService.class);
@@ -536,6 +550,8 @@ class ImageGenerationServiceTest {
                 brandMoodRepository,
                 assetRepository,
                 referenceAssetRepository,
+                sizeRepository,
+                sizeMeasurementRepository,
                 usersRepository,
                 imageGenerationWorker,
                 gcsService,
@@ -560,6 +576,15 @@ class ImageGenerationServiceTest {
         when(measurementGuide.getReferenceKey()).thenReturn("REF_PRODUCT_TEMPLATE_MEASUREMENT_GUIDE");
         when(measurementGuide.getDescription()).thenReturn("상품 중앙 정렬과 외곽 점선 측정선을 사용하는 실측 안내 구도.");
         when(referenceAssetRepository.findById(86L)).thenReturn(Optional.of(measurementGuide));
+        Size freeSize = mock(Size.class);
+        SizeMeasurement shoulder = mock(SizeMeasurement.class);
+        SizeMeasurement length = mock(SizeMeasurement.class);
+        when(freeSize.getId()).thenReturn(20L);
+        when(shoulder.getName()).thenReturn("어깨너비");
+        when(length.getName()).thenReturn("총장");
+        when(sizeRepository.findByProductIdOrderByIdAsc(1L)).thenReturn(List.of(freeSize));
+        when(sizeMeasurementRepository.findBySizeIdInOrderByIdAsc(List.of(20L)))
+                .thenReturn(List.of(shoulder, length));
         when(jobRepository.save(any(ImageGenerationJob.class))).thenAnswer(invocation -> {
             ImageGenerationJob job = invocation.getArgument(0);
             if (job.getId() == null) {
@@ -588,6 +613,10 @@ class ImageGenerationServiceTest {
         assertTrue(work.tasks().get(0).referenceImages().isEmpty());
         assertTrue(work.tasks().get(0).prompt().contains("MEASUREMENT GUIDE PRODUCT IMAGE"));
         assertTrue(work.tasks().get(0).prompt().contains("상품 중앙 정렬과 외곽 점선 측정선을 사용하는 실측 안내 구도."));
+        assertTrue(work.tasks().get(0).prompt().contains("[MEASUREMENT PARTS TO VISUALIZE]"));
+        assertTrue(work.tasks().get(0).prompt().contains("- 어깨너비"));
+        assertTrue(work.tasks().get(0).prompt().contains("- 총장"));
+        assertTrue(work.tasks().get(0).prompt().contains("Do not render measurement names, labels, numbers, size values, or any text."));
         assertFalse(work.tasks().get(0).prompt().contains("[SYSTEM INSTRUCTION]"));
         assertFalse(work.tasks().get(0).prompt().contains("[BRAND INSTRUCTION]"));
         assertFalse(work.tasks().get(0).prompt().contains("shotReferenceImage = SHOT_COMPOSITION_REFERENCE"));
