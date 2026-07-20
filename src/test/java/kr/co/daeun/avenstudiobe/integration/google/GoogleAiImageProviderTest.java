@@ -144,18 +144,23 @@ class GoogleAiImageProviderTest {
         List<Map<String, Object>> parts =
                 (List<Map<String, Object>>) contents.get(0).get("parts");
 
-        String backgroundInstruction = parts.get(1).get("text").toString();
-        String shotInstruction = parts.get(3).get("text").toString();
+        String shotInstruction = parts.get(1).get("text").toString();
+        String backgroundInstruction = parts.get(3).get("text").toString();
         String productFrontInstruction = parts.get(5).get("text").toString();
         String productBackInstruction = parts.get(7).get("text").toString();
+        String finalInstruction = parts.get(parts.size() - 1).get("text").toString();
 
-        assertTrue(backgroundInstruction.contains("BACKGROUND_REFERENCE"));
         assertTrue(shotInstruction.contains("SHOT_COMPOSITION_REFERENCE"));
         assertFalse(shotInstruction.contains("다른 상품의 색상과 로고"));
         assertFalse(shotInstruction.contains("Composition-only description"));
+        assertTrue(backgroundInstruction.contains("BACKGROUND_REFERENCE"));
         assertTrue(productFrontInstruction.contains("PRODUCT_FRONT"));
         assertTrue(productBackInstruction.contains("PRODUCT_BACK"));
-        assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
+        assertTrue(finalInstruction.contains("FINAL NON-NEGOTIABLE"));
+        assertTrue(finalInstruction.contains("BACKGROUND SCENE LOCK"));
+        assertTrue(finalInstruction.contains("same scene across every output"));
+        assertTrue(finalInstruction.contains("original color and white balance"));
+        assertFalse(finalInstruction.contains("match the product color to the background"));
     }
 
     @Test

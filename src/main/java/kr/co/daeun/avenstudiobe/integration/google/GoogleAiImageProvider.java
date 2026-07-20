@@ -131,8 +131,10 @@ public class GoogleAiImageProvider {
                 "text", prompt
         ));
 
-        if (referenceImages != null) {
-            for (ReferenceImage referenceImage : orderProductCutReferences(referenceImages)) {
+        List<ReferenceImage> orderedReferences = referenceImages == null
+                ? List.of()
+                : orderProductCutReferences(referenceImages);
+        for (ReferenceImage referenceImage : orderedReferences) {
                 parts.add(Map.of(
                         "text", buildReferenceRoleInstruction(referenceImage)
                 ));
@@ -142,12 +144,15 @@ public class GoogleAiImageProvider {
                                 "data", Base64.getEncoder().encodeToString(referenceImage.bytes())
                         )
                 ));
-            }
         }
 
-        if (finalInstruction != null && !finalInstruction.isBlank()) {
+        String completedFinalInstruction = appendProductCutBackgroundLock(
+                finalInstruction,
+                orderedReferences
+        );
+        if (completedFinalInstruction != null && !completedFinalInstruction.isBlank()) {
             parts.add(Map.of(
-                    "text", finalInstruction
+                    "text", completedFinalInstruction
             ));
         }
 
@@ -163,12 +168,45 @@ public class GoogleAiImageProvider {
 
         List<ReferenceImage> ordered = new ArrayList<>(referenceImages.size());
         referenceImages.stream()
+                .filter(reference -> "SHOT_COMPOSITION_REFERENCE".equals(reference.role()))
+                .forEach(ordered::add);
+        referenceImages.stream()
+                .filter(reference -> "BACKGROUND_REFERENCE".equals(reference.role()))
+                .forEach(ordered::add);
+        referenceImages.stream()
+                .filter(reference -> !"SHOT_COMPOSITION_REFERENCE".equals(reference.role()))
+                .filter(reference -> !"BACKGROUND_REFERENCE".equals(reference.role()))
                 .filter(reference -> !isProductAccuracyReference(reference))
                 .forEach(ordered::add);
         referenceImages.stream()
                 .filter(this::isProductAccuracyReference)
                 .forEach(ordered::add);
         return ordered;
+    }
+
+    private String appendProductCutBackgroundLock(
+            String finalInstruction,
+            List<ReferenceImage> referenceImages
+    ) {
+        boolean hasShotComposition = referenceImages.stream()
+                .anyMatch(reference -> "SHOT_COMPOSITION_REFERENCE".equals(reference.role()));
+        boolean hasBackground = referenceImages.stream()
+                .anyMatch(reference -> "BACKGROUND_REFERENCE".equals(reference.role()));
+        if (!hasShotComposition || !hasBackground) {
+            return finalInstruction;
+        }
+
+        String backgroundLock = """
+                [BACKGROUND SCENE LOCK]
+                Recreate BACKGROUND_REFERENCE as the same scene across every output in this request.
+                Keep its background color family, surface material, lighting direction, lighting softness, spatial depth, and shadow style consistent.
+                Do not use any background or lighting visible in SHOT_COMPOSITION_REFERENCE.
+                Preserve the target product's original color and white balance. Adjust only the surrounding scene and contact shadow.
+                """.strip();
+        if (finalInstruction == null || finalInstruction.isBlank()) {
+            return backgroundLock;
+        }
+        return finalInstruction + "\n\n" + backgroundLock;
     }
 
     private boolean isProductAccuracyReference(ReferenceImage referenceImage) {
