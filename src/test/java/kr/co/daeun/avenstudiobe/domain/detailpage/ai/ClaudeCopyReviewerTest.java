@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient.ClaudeTextResponse;
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeOperation;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,7 @@ class ClaudeCopyReviewerTest {
         when(promptBuilder.buildSystemPrompt()).thenReturn("system");
         when(promptBuilder.buildUserContent(null, List.of())).thenReturn(List.of());
         when(claudeClient.requestMultimodalTextWithMetadata(
+                eq(ClaudeOperation.COPY_REVIEW),
                 eq("system"),
                 anyList(),
                 eq(8192),
@@ -68,6 +70,7 @@ class ClaudeCopyReviewerTest {
         when(promptBuilder.buildSystemPrompt()).thenReturn("system");
         when(promptBuilder.buildUserContent(null, List.of())).thenReturn(List.of());
         when(claudeClient.requestMultimodalTextWithMetadata(
+                eq(ClaudeOperation.COPY_REVIEW),
                 anyString(),
                 anyList(),
                 anyInt(),
@@ -86,6 +89,7 @@ class ClaudeCopyReviewerTest {
         when(promptBuilder.buildSystemPrompt()).thenReturn("system");
         when(promptBuilder.buildUserContent(null, List.of())).thenReturn(List.of());
         when(claudeClient.requestMultimodalTextWithMetadata(
+                eq(ClaudeOperation.COPY_REVIEW),
                 anyString(),
                 anyList(),
                 anyInt(),

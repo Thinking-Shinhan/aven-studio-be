@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClientRequest;
 
 @Component
+@Slf4j
 public class ClaudeClient {
 
     private static final Consumer<String> IGNORE_STOP_REASON = ignored -> { };
@@ -30,10 +32,27 @@ public class ClaudeClient {
     }
 
     public String requestText(String systemPrompt, String userPrompt) {
-        return requestText(systemPrompt, userPrompt, properties.getTimeoutSeconds());
+        return requestText(ClaudeOperation.UNKNOWN, systemPrompt, userPrompt, properties.getTimeoutSeconds());
     }
 
     public String requestText(String systemPrompt, String userPrompt, Integer timeoutSeconds) {
+        return requestText(ClaudeOperation.UNKNOWN, systemPrompt, userPrompt, timeoutSeconds);
+    }
+
+    public String requestText(
+            ClaudeOperation operation,
+            String systemPrompt,
+            String userPrompt
+    ) {
+        return requestText(operation, systemPrompt, userPrompt, properties.getTimeoutSeconds());
+    }
+
+    public String requestText(
+            ClaudeOperation operation,
+            String systemPrompt,
+            String userPrompt,
+            Integer timeoutSeconds
+    ) {
         validateApiKey();
 
         if (userPrompt == null || userPrompt.isBlank()) {
@@ -49,7 +68,12 @@ public class ClaudeClient {
                     systemPrompt,
                     List.of(new ClaudeMessageDto("user", userPrompt))
             );
-            return executeWithRetry(request, positiveOrDefault(timeoutSeconds, 20), IGNORE_STOP_REASON).text();
+            return executeWithRetry(
+                    request,
+                    positiveOrDefault(timeoutSeconds, 20),
+                    IGNORE_STOP_REASON,
+                    operation
+            ).text();
         } finally {
             requestPermits.release();
         }
@@ -66,7 +90,8 @@ public class ClaudeClient {
                 userContentBlocks,
                 maxTokens,
                 timeoutSeconds,
-                IGNORE_STOP_REASON
+                IGNORE_STOP_REASON,
+                ClaudeOperation.UNKNOWN
         );
     }
 
@@ -77,12 +102,31 @@ public class ClaudeClient {
             Integer timeoutSeconds,
             Consumer<String> stopReasonObserver
     ) {
+        return requestMultimodalText(
+                systemPrompt,
+                userContentBlocks,
+                maxTokens,
+                timeoutSeconds,
+                stopReasonObserver,
+                ClaudeOperation.UNKNOWN
+        );
+    }
+
+    private String requestMultimodalText(
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds,
+            Consumer<String> stopReasonObserver,
+            ClaudeOperation operation
+    ) {
         ClaudeTextResponse response = requestMultimodalResponse(
                 systemPrompt,
                 userContentBlocks,
                 maxTokens,
                 timeoutSeconds,
-                stopReasonObserver
+                stopReasonObserver,
+                operation
         );
         return response.text();
     }
@@ -98,7 +142,25 @@ public class ClaudeClient {
                 userContentBlocks,
                 maxTokens,
                 timeoutSeconds,
-                IGNORE_STOP_REASON
+                IGNORE_STOP_REASON,
+                ClaudeOperation.UNKNOWN
+        );
+    }
+
+    public ClaudeTextResponse requestMultimodalTextWithMetadata(
+            ClaudeOperation operation,
+            String systemPrompt,
+            List<ClaudeContentBlockDto> userContentBlocks,
+            Integer maxTokens,
+            Integer timeoutSeconds
+    ) {
+        return requestMultimodalResponse(
+                systemPrompt,
+                userContentBlocks,
+                maxTokens,
+                timeoutSeconds,
+                IGNORE_STOP_REASON,
+                operation
         );
     }
 
@@ -107,7 +169,8 @@ public class ClaudeClient {
             List<ClaudeContentBlockDto> userContentBlocks,
             Integer maxTokens,
             Integer timeoutSeconds,
-            Consumer<String> stopReasonObserver
+            Consumer<String> stopReasonObserver,
+            ClaudeOperation operation
     ) {
         validateApiKey();
 
@@ -134,7 +197,7 @@ public class ClaudeClient {
             Consumer<String> observer = stopReasonObserver == null
                     ? IGNORE_STOP_REASON
                     : stopReasonObserver;
-            return executeWithRetry(request, effectiveTimeout, observer);
+            return executeWithRetry(request, effectiveTimeout, observer, operation);
         } finally {
             requestPermits.release();
         }
@@ -143,7 +206,8 @@ public class ClaudeClient {
     private ClaudeTextResponse executeWithRetry(
             Object request,
             int timeoutSeconds,
-            Consumer<String> stopReasonObserver
+            Consumer<String> stopReasonObserver,
+            ClaudeOperation operation
     ) {
         int maxRetries = nonNegativeOrDefault(properties.getMaxRetries(), 1);
         long retryDelayMillis = nonNegativeOrDefault(properties.getRetryDelayMillis(), 300);
@@ -151,7 +215,13 @@ public class ClaudeClient {
 
         for (int attempt = 0; ; attempt++) {
             try {
-                return executeRequest(request, remainingTimeout(deadlineNanos), stopReasonObserver);
+                return executeRequest(
+                        request,
+                        remainingTimeout(deadlineNanos),
+                        stopReasonObserver,
+                        operation,
+                        attempt + 1
+                );
             } catch (ClaudeApiException e) {
                 if (attempt >= maxRetries || !isRetryable(e)) {
                     throw e;
@@ -164,7 +234,9 @@ public class ClaudeClient {
     private ClaudeTextResponse executeRequest(
             Object request,
             Duration timeout,
-            Consumer<String> stopReasonObserver
+            Consumer<String> stopReasonObserver,
+            ClaudeOperation operation,
+            int attempt
     ) {
         try {
             ResponseEntity<ClaudeMessageRespDto> responseEntity = claudeWebClient.post()
@@ -191,10 +263,16 @@ public class ClaudeClient {
             ClaudeMessageRespDto response = responseEntity == null ? null : responseEntity.getBody();
             String stopReason = response == null ? null : response.stopReason();
             stopReasonObserver.accept(stopReason);
+            ClaudeUsageDto usage = response == null ? null : response.usage();
+            String requestId = responseEntity == null
+                    ? null
+                    : responseEntity.getHeaders().getFirst("request-id");
+            logUsage(operation, attempt, stopReason, requestId, usage);
             return new ClaudeTextResponse(
                     extractText(response),
                     stopReason,
-                    responseEntity == null ? null : responseEntity.getHeaders().getFirst("request-id")
+                    requestId,
+                    usage
             );
         } catch (ClaudeApiException e) {
             throw e;
@@ -262,6 +340,45 @@ public class ClaudeClient {
         }
     }
 
+    private void logUsage(
+            ClaudeOperation operation,
+            int attempt,
+            String stopReason,
+            String requestId,
+            ClaudeUsageDto usage
+    ) {
+        ClaudeOperation effectiveOperation = operation == null ? ClaudeOperation.UNKNOWN : operation;
+        if (usage == null) {
+            log.warn(
+                    "Claude usage missing. operation={}, model={}, attempt={}, stopReason={}, requestId={}",
+                    effectiveOperation,
+                    properties.getModel(),
+                    attempt,
+                    stopReason,
+                    requestId
+            );
+            return;
+        }
+
+        log.info(
+                "Claude usage. operation={}, model={}, attempt={}, inputTokens={}, outputTokens={}, "
+                        + "cacheCreationInputTokens={}, cacheReadInputTokens={}, stopReason={}, requestId={}",
+                effectiveOperation,
+                properties.getModel(),
+                attempt,
+                zeroIfNull(usage.inputTokens()),
+                zeroIfNull(usage.outputTokens()),
+                zeroIfNull(usage.cacheCreationInputTokens()),
+                zeroIfNull(usage.cacheReadInputTokens()),
+                stopReason,
+                requestId
+        );
+    }
+
+    private static long zeroIfNull(Long value) {
+        return value == null ? 0L : value;
+    }
+
     private static int positiveOrDefault(Integer value, int defaultValue) {
         return value == null || value <= 0 ? defaultValue : value;
     }
@@ -273,7 +390,11 @@ public class ClaudeClient {
     public record ClaudeTextResponse(
             String text,
             String stopReason,
-            String requestId
+            String requestId,
+            ClaudeUsageDto usage
     ) {
+        public ClaudeTextResponse(String text, String stopReason, String requestId) {
+            this(text, stopReason, requestId, null);
+        }
     }
 }

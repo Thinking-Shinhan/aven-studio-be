@@ -7,6 +7,8 @@ public record ClaudeMessageRespDto(
         List<ClaudeContentDto> content,
 
         @JsonProperty("stop_reason")
-        String stopReason
+        String stopReason,
+
+        ClaudeUsageDto usage
 ) {
 }
