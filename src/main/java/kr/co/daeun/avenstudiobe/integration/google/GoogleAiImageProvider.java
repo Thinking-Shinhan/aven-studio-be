@@ -188,7 +188,8 @@ public class GoogleAiImageProvider {
                     Use it as a background scene recipe, not as a literal background plate.
                     Do not directly copy or paste this exact image.
                     Extract only the reusable studio environment: color family, surface material, lighting softness, spatial depth, and shadow style.
-                    Harmonize only the surrounding light, contact shadow, perspective, and background color temperature.
+                    Integrate the target product or model using only coherent perspective, surrounding light, and contact shadow.
+                    Preserve the target product's original white balance and actual color independently from the background.
                     Never alter the target product's actual color, logo, text, pattern, material, texture, seams, construction, or silhouette to match the background.
                     """.strip();
             case "SHOT_COMPOSITION_REFERENCE" -> header

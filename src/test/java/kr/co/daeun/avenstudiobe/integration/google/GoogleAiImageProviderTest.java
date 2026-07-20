@@ -109,6 +109,8 @@ class GoogleAiImageProviderTest {
         assertTrue(parts.get(7).get("text").toString().contains("garment rear accuracy"));
         assertTrue(parts.get(9).get("text").toString().contains("Background scene description"));
         assertTrue(parts.get(9).get("text").toString().contains("background scene recipe"));
+        assertTrue(parts.get(9).get("text").toString().contains("original white balance and actual color"));
+        assertFalse(parts.get(9).get("text").toString().contains("background color temperature"));
         assertTrue(parts.get(9).get("text").toString().contains("Never alter the target product's actual color"));
         assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
     }
