@@ -1,6 +1,7 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.ai;
 
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient;
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeOperation;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,7 @@ public class AutoPlacementAiClient {
 
     public AutoPlacementAiResponseDto requestPlacement(String systemPrompt, String userPrompt) {
         String rawText = claudeClient.requestText(
+                ClaudeOperation.AUTO_PLACEMENT,
                 systemPrompt,
                 userPrompt,
                 claudeProperties.getImagePlacementTimeoutSeconds()

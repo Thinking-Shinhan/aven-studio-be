@@ -10,6 +10,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.validator.CopyValidationErrorC
 import kr.co.daeun.avenstudiobe.domain.detailpage.validator.CopyValidationResult;
 import kr.co.daeun.avenstudiobe.domain.detailpage.validator.GeneratedCopyValidator;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient;
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeOperation;
 import kr.co.daeun.avenstudiobe.global.exception.InvalidCopyGenerationResultException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,11 @@ public class ClaudeCopyGenerator implements CopyGenerator {
     public CopyGenerationResult generate(CopyGenerationContext context) {
         String systemPrompt = copyPromptBuilder.buildSystemPrompt();
         String userMessage = copyPromptBuilder.buildUserMessage(context);
-        String rawResponse = claudeClient.requestText(systemPrompt, userMessage);
+        String rawResponse = claudeClient.requestText(
+                ClaudeOperation.COPY_GENERATION,
+                systemPrompt,
+                userMessage
+        );
 
         ParseResult firstParse = parse(rawResponse);
         if (firstParse.failed()) {
@@ -58,7 +63,11 @@ public class ClaudeCopyGenerator implements CopyGenerator {
             List<CopyValidationError> errors
     ) {
         String correctionMessage = copyPromptBuilder.buildCorrectionMessage(context, rawResponse, errors);
-        String correctedRawResponse = claudeClient.requestText(systemPrompt, correctionMessage);
+        String correctedRawResponse = claudeClient.requestText(
+                ClaudeOperation.COPY_CORRECTION,
+                systemPrompt,
+                correctionMessage
+        );
         ParseResult correctedParse = parse(correctedRawResponse);
 
         if (correctedParse.failed()) {

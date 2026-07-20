@@ -12,6 +12,7 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.CopyReviewContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ReviewImage;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeClient.ClaudeTextResponse;
+import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeOperation;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class ClaudeCopyReviewer {
             List<ReviewImage> images
     ) {
         ClaudeTextResponse response = claudeClient.requestMultimodalTextWithMetadata(
+                ClaudeOperation.COPY_REVIEW,
                 promptBuilder.buildSystemPrompt(),
                 promptBuilder.buildUserContent(context, images),
                 claudeProperties.getReviewMaxTokens(),

@@ -35,7 +35,11 @@ class ClaudeClientMultimodalRequestTest {
                                             .header("Content-Type", "application/json")
                                             .header("request-id", "req-multimodal-test")
                                             .sendString(Mono.just("""
-                                                    {"content":[{"type":"text","text":"ok"}],"stop_reason":"max_tokens"}
+                                                    {"content":[{"type":"text","text":"ok"}],
+                                                     "stop_reason":"max_tokens",
+                                                     "usage":{"input_tokens":1234,"output_tokens":567,
+                                                              "cache_creation_input_tokens":89,
+                                                              "cache_read_input_tokens":10}}
                                                     """))
                                             .then());
                         }))
@@ -67,6 +71,10 @@ class ClaudeClientMultimodalRequestTest {
             assertEquals("ok", result.text());
             assertEquals("max_tokens", result.stopReason());
             assertEquals("req-multimodal-test", result.requestId());
+            assertEquals(1234L, result.usage().inputTokens());
+            assertEquals(567L, result.usage().outputTokens());
+            assertEquals(89L, result.usage().cacheCreationInputTokens());
+            assertEquals(10L, result.usage().cacheReadInputTokens());
 
             JsonNode json = new ObjectMapper().readTree(requestBody.get());
             assertEquals(8192, json.path("max_tokens").asInt());
