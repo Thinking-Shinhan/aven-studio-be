@@ -68,3 +68,8 @@ image-generation:
   task-executor:
     pool-size: ${IMAGE_GENERATION_TASK_POOL_SIZE:2}
     queue-capacity: ${IMAGE_GENERATION_TASK_QUEUE_CAPACITY:100}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics

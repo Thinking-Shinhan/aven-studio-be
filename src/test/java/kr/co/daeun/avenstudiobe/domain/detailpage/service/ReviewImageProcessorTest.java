@@ -11,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -41,7 +42,12 @@ class ReviewImageProcessorTest {
 
     private final GcsService gcsService = mock(GcsService.class);
     private final ClaudeProperties properties = new ClaudeProperties();
-    private final ReviewImageProcessor processor = new ReviewImageProcessor(gcsService, properties);
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final ReviewImageProcessor processor = new ReviewImageProcessor(
+            gcsService,
+            properties,
+            meterRegistry
+    );
 
     @BeforeEach
     void setUp() {
@@ -75,6 +81,7 @@ class ReviewImageProcessorTest {
         assertFalse(result.blocks().get(1).imagesOmitted());
         assertEquals(List.of(), result.blocks().get(2).placedImageAssetIds());
         assertTrue(result.blocks().get(2).imagesOmitted());
+        assertEquals(1, meterRegistry.timer("review.image.single").count());
         verify(gcsService, never()).download("asset-10.png");
         verify(gcsService, never()).download("asset-30.png");
     }

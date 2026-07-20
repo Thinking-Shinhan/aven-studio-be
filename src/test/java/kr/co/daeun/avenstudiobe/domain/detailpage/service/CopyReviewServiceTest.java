@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.AiCopyReviewResponseDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.ai.ClaudeCopyReviewer;
@@ -38,6 +39,7 @@ class CopyReviewServiceTest {
     private CopyReviewResultValidator resultValidator;
     private CopyReviewService service;
     private Authentication authentication;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -46,12 +48,14 @@ class CopyReviewServiceTest {
         imageProcessor = mock(ReviewImageProcessor.class);
         copyReviewer = mock(ClaudeCopyReviewer.class);
         resultValidator = mock(CopyReviewResultValidator.class);
+        meterRegistry = new SimpleMeterRegistry();
         service = new CopyReviewService(
                 requestValidator,
                 contextLoader,
                 imageProcessor,
                 copyReviewer,
-                resultValidator
+                resultValidator,
+                meterRegistry
         );
         authentication = mock(Authentication.class);
     }
@@ -80,6 +84,9 @@ class CopyReviewServiceTest {
         order.verify(imageProcessor).process(loaded.blocks(), loaded.assetSources());
         order.verify(copyReviewer).review(loaded, processed.images());
         order.verify(resultValidator).validate(loaded, aiResponse);
+        assertEquals(1, meterRegistry.timer("review.total").count());
+        assertEquals(1, meterRegistry.timer("review.image.pipeline").count());
+        assertEquals(1, meterRegistry.timer("review.claude.call").count());
     }
 
     @Test
