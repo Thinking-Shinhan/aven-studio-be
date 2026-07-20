@@ -167,7 +167,10 @@ public class GoogleAiImageProvider {
                     """.strip();
             case "MODEL_REFERENCE" -> header + "\n" + """
                     This image is MODEL_REFERENCE.
-                    Use it only for identity, face, body proportions, skin tone, and hair.
+                    Use it as a non-negotiable identity reference for the final person.
+                    The final person must be the same exact person as this image.
+                    Preserve face shape, ethnicity, skin tone, age impression, body proportions, hairstyle, hair color, and overall human identity.
+                    Do not generate a different person or reinterpret the model as another race, age, face, body type, or hairstyle.
                     Do not copy its camera viewpoint, body direction, clothing, or background.
                     """.strip();
             case "PRODUCT_FRONT" -> header + "\n"

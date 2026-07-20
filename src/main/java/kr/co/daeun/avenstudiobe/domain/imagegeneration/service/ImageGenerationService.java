@@ -683,6 +683,14 @@ public class ImageGenerationService {
             String cameraInstruction = cameraAngle == null
                     ? null
                     : FINAL_CAMERA_INSTRUCTIONS.get(cameraAngle);
+            sections.add("""
+                    PERSON IDENTITY:
+                    MODEL_REFERENCE identity is a non-negotiable constraint.
+                    The final person must be the same exact person as MODEL_REFERENCE.
+                    Do not generate a different person.
+                    Do not change race, ethnicity, face shape, skin tone, age impression, hairstyle, hair color, or body proportions.
+                    If product, pose, background, brand mood, or user prompt conflicts with MODEL_REFERENCE identity, preserve MODEL_REFERENCE identity first.
+                    """.strip());
             if (cameraInstruction != null) {
                 sections.add("CAMERA VIEW:\n" + cameraInstruction);
             }

@@ -89,6 +89,8 @@ class GoogleAiImageProviderTest {
         assertTrue(parts.get(1).get("text").toString().contains("This image is POSE_REFERENCE"));
         assertTrue(parts.get(2).containsKey("inlineData"));
         assertTrue(parts.get(3).get("text").toString().contains("This image is MODEL_REFERENCE"));
+        assertTrue(parts.get(3).get("text").toString().contains("non-negotiable identity reference"));
+        assertTrue(parts.get(3).get("text").toString().contains("same exact person"));
         assertTrue(parts.get(5).get("text").toString().contains("garment front accuracy"));
         assertTrue(parts.get(7).get("text").toString().contains("garment rear accuracy"));
         assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
