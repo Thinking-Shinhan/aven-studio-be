@@ -93,7 +93,7 @@ class ImageGenerationServiceTest {
         assertTrue(instruction.contains("shotReferenceImage = SHOT_COMPOSITION_REFERENCE"));
         assertTrue(instruction.contains("Never use the product shown inside SHOT_COMPOSITION_REFERENCE"));
         assertTrue(instruction.contains("The final product must be the exact product from GARMENT_REFERENCE"));
-        assertTrue(instruction.contains("BACKGROUND_REFERENCE background structure"));
+        assertTrue(instruction.contains("BACKGROUND_REFERENCE background scene"));
         assertTrue(instruction.contains("SHOT_COMPOSITION_REFERENCE product composition"));
         assertFalse(instruction.contains("SHOT_COMPOSITION_REFERENCE composition and presentation"));
         assertFalse(instruction.contains("Only one model may appear"));
@@ -113,28 +113,6 @@ class ImageGenerationServiceTest {
         assertTrue(instruction.contains("Preserve its actual category, color, silhouette"));
         assertTrue(instruction.contains("must never recolor, blur, simplify, redesign, or remove"));
         assertTrue(instruction.contains("vertical portrait image with an exact 3:4 aspect ratio"));
-    }
-
-    @Test
-    void finalSceneColorLockOverridesReferenceColorCast() throws Exception {
-        String instruction = invokeFinalOutputInstruction(
-                "PRODUCT_CUT",
-                "COOL",
-                null,
-                null,
-                "3:4"
-        );
-
-        assertTrue(instruction.contains("FINAL SCENE COLOR LOCK"));
-        assertTrue(instruction.contains("7000K"));
-        assertTrue(instruction.contains("HEX #C9D0D8 to #E2E6EA"));
-        assertTrue(instruction.contains("overrides any conflicting color cast"));
-        assertTrue(instruction.contains("ICY COOL TONE studio environment"));
-        assertTrue(instruction.contains("Absolutely NO warm ambient light"));
-        assertTrue(instruction.contains("NO yellow or beige tints"));
-        assertTrue(instruction.contains("NO sunlight streaks"));
-        assertTrue(instruction.contains("NO glossy or marble textures"));
-        assertTrue(instruction.contains("Preserve the product's inherent color"));
     }
 
     @Test
@@ -158,9 +136,9 @@ class ImageGenerationServiceTest {
 
         String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
 
-        assertTrue(instruction.contains("7000K"));
-        assertTrue(instruction.contains("HEX #C9D0D8 to #E2E6EA"));
-        assertTrue(instruction.contains("Absolutely NO warm ambient light"));
+        assertTrue(instruction.contains("6500K"));
+        assertTrue(instruction.contains("HEX #C4D1DE"));
+        assertTrue(instruction.contains("Do not introduce warm, yellowish, beige, or orange ambient light"));
         assertTrue(instruction.contains("Preserve the product's inherent color"));
         assertTrue(instruction.contains("카메라를 모델의 신체 정면 앞에 배치한다"));
         assertTrue(instruction.contains("피사체가 사선이나 후면으로 회전하지 않도록 한다"));
@@ -553,7 +531,7 @@ class ImageGenerationServiceTest {
         request.setCutType("PRODUCT_CUT");
         request.setPrompt("Generate each selected product shot.");
         request.setUserOptionsJson(objectMapper.readTree("""
-                {"aspectRatio":"RATIO_3_4","colorTemperature":"COOL"}
+                {"aspectRatio":"RATIO_3_4"}
                 """));
         request.setReferenceJson(objectMapper.readTree("""
                 {"shotReferenceIds":[11,12,13,14]}
@@ -579,9 +557,6 @@ class ImageGenerationServiceTest {
 
         assertEquals(4, prompts.size());
         assertTrue(work.tasks().stream().allMatch(task -> "3:4".equals(task.aspectRatio())));
-        assertTrue(work.tasks().stream().allMatch(task -> task.finalInstruction().contains("FINAL SCENE COLOR LOCK")));
-        assertTrue(work.tasks().stream().allMatch(task -> task.finalInstruction().contains("Absolutely NO warm ambient light")));
-        assertEquals(1, work.tasks().stream().map(ImageGenerationWork.Task::finalInstruction).distinct().count());
         assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 11 (SHOT_11)")));
         assertTrue(prompts.stream().anyMatch(prompt -> prompt.contains("referenceAssetId 14 (SHOT_14)")));
         assertEquals(Set.of(
@@ -804,32 +779,6 @@ class ImageGenerationServiceTest {
         );
         method.setAccessible(true);
         return (String) method.invoke(service, cutType, cameraAngle, framing, aspectRatio);
-    }
-
-    private String invokeFinalOutputInstruction(
-            String cutType,
-            String colorTemperature,
-            String cameraAngle,
-            String framing,
-            String aspectRatio
-    ) throws Exception {
-        Method method = ImageGenerationService.class.getDeclaredMethod(
-                "buildFinalOutputInstruction",
-                String.class,
-                String.class,
-                String.class,
-                String.class,
-                String.class
-        );
-        method.setAccessible(true);
-        return (String) method.invoke(
-                service,
-                cutType,
-                colorTemperature,
-                cameraAngle,
-                framing,
-                aspectRatio
-        );
     }
 
     private String invokeModelMetadataDescription(

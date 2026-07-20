@@ -82,12 +82,9 @@ public class ImageGenerationService {
                     Preserve the product's inherent color, logo, material, and details without recoloring them.
                     """.strip(),
             "COOL", """
-                    Apply a highly sterile, ICY COOL TONE studio environment.
-                    The background must be a seamless, matte infinite backdrop (cyclorama wall) in a desaturated steel gray-blue similar to HEX #C9D0D8 to #E2E6EA.
-                    Set the color temperature to a crisp, cold 7000K.
-                    Use soft, diffused studio lighting that casts clean, cool-tinted shadows on the floor.
-                    Absolutely NO warm ambient light, NO yellow or beige tints, NO sunlight streaks, and NO glossy or marble textures on the ground.
-                    The entire scene must feel cold, modern, completely matte, and perfectly neutral-cool.
+                    Set the scene color temperature to 6500K with a pale blue base similar to HEX #C4D1DE.
+                    Use clear, cool lighting and make the product look naturally integrated within the cool scene.
+                    Do not introduce warm, yellowish, beige, or orange ambient light.
                     Preserve the product's inherent color, logo, material, and details without recoloring them.
                     """.strip()
     );
@@ -265,12 +262,10 @@ public class ImageGenerationService {
             long startedAt
     ) {
         JsonNode storedUserOptions = readStoredJson(job.getUserOptionsJson());
-        String colorTemperature = optionValue(storedUserOptions, "colorTemperature");
         String cameraAngle = optionValue(storedUserOptions, "cameraAngle");
         String framing = optionValue(storedUserOptions, "framing");
         String finalInstruction = buildFinalOutputInstruction(
                 job.getCutType(),
-                colorTemperature,
                 cameraAngle,
                 framing,
                 generationPlan.aspectRatio()
@@ -697,7 +692,6 @@ public class ImageGenerationService {
 
     private String buildFinalOutputInstruction(
             String cutType,
-            String colorTemperature,
             String cameraAngle,
             String framing,
             String aspectRatio
@@ -749,31 +743,8 @@ public class ImageGenerationService {
             sections.add("OUTPUT CANVAS:\n" + buildAspectRatioInstruction(aspectRatio));
         }
 
-        if (colorTemperature != null) {
-            String colorTemperatureInstruction = COLOR_TEMPERATURE_INSTRUCTIONS.get(colorTemperature);
-            if (colorTemperatureInstruction == null) {
-                throw new IllegalArgumentException("지원하지 않는 색온도입니다: " + colorTemperature);
-            }
-            sections.add("""
-                    FINAL SCENE COLOR LOCK:
-                    Apply one consistent scene white balance across every output in this request.
-                    Use BACKGROUND_REFERENCE for spatial layout, surface material, lighting direction, depth, and shadow structure only.
-                    The selected scene color temperature overrides any conflicting color cast or white balance visible in BACKGROUND_REFERENCE or SHOT_COMPOSITION_REFERENCE.
-                    %s
-                    """.formatted(colorTemperatureInstruction).strip());
-        }
-
         sections.add("If any visual reference conflicts with these constraints, these final constraints take priority.");
         return String.join("\n\n", sections);
-    }
-
-    private String buildFinalOutputInstruction(
-            String cutType,
-            String cameraAngle,
-            String framing,
-            String aspectRatio
-    ) {
-        return buildFinalOutputInstruction(cutType, null, cameraAngle, framing, aspectRatio);
     }
 
     private String buildAspectRatioInstruction(String aspectRatio) {
@@ -801,7 +772,7 @@ public class ImageGenerationService {
                     Never swap the role of each reference image.
 
                     GARMENT_REFERENCE is the only product identity and product accuracy reference.
-                    BACKGROUND_REFERENCE is only the spatial layout, surface material, lighting direction, depth, and shadow structure reference.
+                    BACKGROUND_REFERENCE is only the background color, material, lighting, depth, shadow, and atmosphere reference.
                     SHOT_COMPOSITION_REFERENCE is only the product view, camera composition, crop, placement, and detail emphasis reference.
 
                     Never use the product shown inside SHOT_COMPOSITION_REFERENCE as the final product.
@@ -814,10 +785,10 @@ public class ImageGenerationService {
 
                     Priority order:
                     1. GARMENT_REFERENCE product accuracy
-                    2. User selected scene color temperature and output constraints
-                    3. BACKGROUND_REFERENCE background structure
-                    4. SHOT_COMPOSITION_REFERENCE product composition
-                    5. Brand mood
+                    2. BACKGROUND_REFERENCE background scene
+                    3. SHOT_COMPOSITION_REFERENCE product composition
+                    4. Brand mood
+                    5. User selected options
                     """;
         }
 

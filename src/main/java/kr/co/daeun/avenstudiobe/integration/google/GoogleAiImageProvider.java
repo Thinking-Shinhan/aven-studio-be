@@ -199,16 +199,14 @@ public class GoogleAiImageProvider {
         String backgroundLock = """
                 [BACKGROUND SCENE LOCK]
                 Recreate BACKGROUND_REFERENCE as the same scene across every output in this request.
-                Keep its spatial layout, surface material, lighting direction, lighting softness, spatial depth, and shadow structure consistent.
-                Do not treat the color cast or white balance visible in BACKGROUND_REFERENCE as mandatory.
-                When a final scene color lock is provided, it overrides the background reference's color cast and white balance.
+                Keep its background color family, surface material, lighting direction, lighting softness, spatial depth, and shadow style consistent.
                 Do not use any background or lighting visible in SHOT_COMPOSITION_REFERENCE.
                 Preserve the target product's original color and white balance. Adjust only the surrounding scene and contact shadow.
                 """.strip();
         if (finalInstruction == null || finalInstruction.isBlank()) {
             return backgroundLock;
         }
-        return backgroundLock + "\n\n" + finalInstruction;
+        return finalInstruction + "\n\n" + backgroundLock;
     }
 
     private boolean isProductAccuracyReference(ReferenceImage referenceImage) {
@@ -251,8 +249,7 @@ public class GoogleAiImageProvider {
                     This image is BACKGROUND_REFERENCE.
                     Use it as a background scene recipe, not as a literal background plate.
                     Do not directly copy or paste this exact image.
-                    Extract only the reusable studio environment: spatial layout, surface material, lighting direction, lighting softness, spatial depth, and shadow structure.
-                    Do not treat the image's color cast or white balance as mandatory when a user-selected scene color temperature is provided.
+                    Extract only the reusable studio environment: color family, surface material, lighting softness, spatial depth, and shadow style.
                     Integrate the target product or model using only coherent perspective, surrounding light, and contact shadow.
                     Preserve the target product's original white balance and actual color independently from the background.
                     Never alter the target product's actual color, logo, text, pattern, material, texture, seams, construction, or silhouette to match the background.
