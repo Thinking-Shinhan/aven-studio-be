@@ -8,9 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -20,6 +22,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.CopyReviewReqDto.ReviewTextSlotReqDto;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ReviewAssetSource;
@@ -46,7 +53,9 @@ class ReviewImageProcessorTest {
     private final ReviewImageProcessor processor = new ReviewImageProcessor(
             gcsService,
             properties,
-            meterRegistry
+            meterRegistry,
+            Runnable::run,
+            Caffeine.newBuilder().build()
     );
 
     @BeforeEach
@@ -127,6 +136,86 @@ class ReviewImageProcessorTest {
         assertEquals(List.of(10L), result.blocks().get(0).associatedImageAssetIds());
         assertEquals(List.of(), result.blocks().get(0).neighboringImageAssetIds());
         assertTrue(result.blocks().get(0).imagesOmitted());
+    }
+
+    @Test
+    void processesImagesConcurrentlyWhilePreservingCandidateOrder() throws Exception {
+        byte[] png = png(8, 4, false);
+        CountDownLatch downloadsStarted = new CountDownLatch(2);
+        CountDownLatch releaseDownloads = new CountDownLatch(1);
+        when(gcsService.download("asset-10.png")).thenAnswer(invocation -> {
+            downloadsStarted.countDown();
+            assertTrue(releaseDownloads.await(2, TimeUnit.SECONDS));
+            return png;
+        });
+        when(gcsService.download("asset-11.png")).thenAnswer(invocation -> {
+            downloadsStarted.countDown();
+            assertTrue(releaseDownloads.await(2, TimeUnit.SECONDS));
+            return png;
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            ReviewImageProcessor parallelProcessor = new ReviewImageProcessor(
+                    gcsService,
+                    properties,
+                    meterRegistry,
+                    executor,
+                    Caffeine.newBuilder().build()
+            );
+            CompletableFuture<ReviewImageProcessor.ProcessResult> resultFuture =
+                    CompletableFuture.supplyAsync(() -> parallelProcessor.process(
+                            List.of(block(1, List.of(10L, 11L), List.of())),
+                            List.of(source(10L, "image/png"), source(11L, "image/png"))
+                    ));
+
+            assertTrue(downloadsStarted.await(2, TimeUnit.SECONDS));
+            releaseDownloads.countDown();
+
+            ReviewImageProcessor.ProcessResult result = resultFuture.get(2, TimeUnit.SECONDS);
+            assertEquals(List.of(10L, 11L), result.images().stream().map(ReviewImage::assetId).toList());
+        } finally {
+            releaseDownloads.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void reusesProcessedBytesForTheSameObject() throws IOException {
+        when(gcsService.download("asset-1.png")).thenReturn(png(100, 50, false));
+
+        ReviewImage first = processor.process(
+                List.of(block(1, List.of(1L), List.of())),
+                List.of(source(1L, "image/png"))
+        ).images().get(0);
+        ReviewImage second = processor.process(
+                List.of(block(1, List.of(1L), List.of())),
+                List.of(source(1L, "image/png"))
+        ).images().get(0);
+
+        assertEquals(first.base64Data(), second.base64Data());
+        verify(gcsService, times(1)).download("asset-1.png");
+        assertEquals(1, meterRegistry.counter("review.image.cache", "result", "miss").count());
+        assertEquals(1, meterRegistry.counter("review.image.cache", "result", "hit").count());
+    }
+
+    @Test
+    void processesAgainWhenResizeSettingChanges() throws IOException {
+        when(gcsService.download("asset-1.png")).thenReturn(png(1000, 500, false));
+
+        ReviewImage first = processor.process(
+                List.of(block(1, List.of(1L), List.of())),
+                List.of(source(1L, "image/png"))
+        ).images().get(0);
+        properties.setReviewImageMaxEdge(256);
+        ReviewImage second = processor.process(
+                List.of(block(1, List.of(1L), List.of())),
+                List.of(source(1L, "image/png"))
+        ).images().get(0);
+
+        assertEquals(512, decodeBase64Image(first.base64Data()).getWidth());
+        assertEquals(256, decodeBase64Image(second.base64Data()).getWidth());
+        verify(gcsService, times(2)).download("asset-1.png");
     }
 
     @Test

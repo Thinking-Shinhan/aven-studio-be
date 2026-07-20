@@ -1,5 +1,6 @@
 package kr.co.daeun.avenstudiobe.domain.detailpage.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -9,6 +10,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Base64;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -28,15 +32,14 @@ import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ReviewBlockContext;
 import kr.co.daeun.avenstudiobe.domain.detailpage.dto.ReviewImage;
 import kr.co.daeun.avenstudiobe.global.ai.claude.ClaudeProperties;
 import kr.co.daeun.avenstudiobe.global.storage.GcsService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ReviewImageProcessor {
 
     private static final String JPEG_MEDIA_TYPE = "image/jpeg";
@@ -45,6 +48,22 @@ public class ReviewImageProcessor {
     private final GcsService gcsService;
     private final ClaudeProperties claudeProperties;
     private final MeterRegistry meterRegistry;
+    private final Executor reviewImageExecutor;
+    private final Cache<String, byte[]> reviewImageCache;
+
+    public ReviewImageProcessor(
+            GcsService gcsService,
+            ClaudeProperties claudeProperties,
+            MeterRegistry meterRegistry,
+            @Qualifier("reviewImageExecutor") Executor reviewImageExecutor,
+            @Qualifier("reviewImageCache") Cache<String, byte[]> reviewImageCache
+    ) {
+        this.gcsService = gcsService;
+        this.claudeProperties = claudeProperties;
+        this.meterRegistry = meterRegistry;
+        this.reviewImageExecutor = reviewImageExecutor;
+        this.reviewImageCache = reviewImageCache;
+    }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ProcessResult process(
@@ -66,13 +85,34 @@ public class ReviewImageProcessor {
                         (first, ignored) -> first
                 ));
 
-        List<ReviewImage> images = selectedCandidates.stream()
-                .map(candidate -> meterRegistry.timer("review.image.single").record(() ->
-                        processImage(candidate.assetId(), sourceByAssetId.get(candidate.assetId()))
+        List<CompletableFuture<ReviewImage>> imageFutures = selectedCandidates.stream()
+                .map(candidate -> CompletableFuture.supplyAsync(
+                        () -> meterRegistry.timer("review.image.single").record(() ->
+                                processImage(candidate.assetId(), sourceByAssetId.get(candidate.assetId()))
+                        ),
+                        reviewImageExecutor
                 ))
                 .toList();
 
+        List<ReviewImage> images = imageFutures.stream()
+                .map(this::joinImage)
+                .toList();
+
         return new ProcessResult(updatedBlocks, images);
+    }
+
+    private ReviewImage joinImage(CompletableFuture<ReviewImage> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            if (e.getCause() instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (e.getCause() instanceof Error error) {
+                throw error;
+            }
+            throw e;
+        }
     }
 
     private List<ImageCandidate> selectCandidates(List<ReviewBlockContext> blocks) {
@@ -185,14 +225,7 @@ public class ReviewImageProcessor {
                 throw new IOException("Image metadata is missing.");
             }
 
-            byte[] originalBytes = gcsService.download(source.objectName());
-            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(originalBytes));
-            if (decoded == null) {
-                throw new IOException("No ImageIO reader could decode the image.");
-            }
-
-            BufferedImage normalized = resizeAndFlatten(decoded);
-            byte[] jpegBytes = encodeJpeg(normalized);
+            byte[] jpegBytes = getOrProcessImage(source);
             return new ReviewImage(
                     assetId,
                     source.assetRole(),
@@ -200,10 +233,47 @@ public class ReviewImageProcessor {
                     JPEG_MEDIA_TYPE,
                     Base64.getEncoder().encodeToString(jpegBytes)
             );
+        } catch (ReviewImageProcessingException e) {
+            log.error("Review image processing failed. assetId={}", assetId, e.getCause());
+            throw new IllegalStateException("Review image processing failed.", e.getCause());
         } catch (Exception e) {
             log.error("Review image processing failed. assetId={}", assetId, e);
             throw new IllegalStateException("검수 이미지를 처리할 수 없습니다.", e);
         }
+    }
+
+    private byte[] getOrProcessImage(ReviewAssetSource source) {
+        String cacheKey = cacheKey(source.objectName());
+        byte[] cached = reviewImageCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            meterRegistry.counter("review.image.cache", "result", "hit").increment();
+            return cached;
+        }
+
+        return reviewImageCache.get(cacheKey, ignored -> {
+            meterRegistry.counter("review.image.cache", "result", "miss").increment();
+            return downloadAndProcessImage(source.objectName());
+        });
+    }
+
+    private byte[] downloadAndProcessImage(String objectName) {
+        try {
+            byte[] originalBytes = gcsService.download(objectName);
+            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(originalBytes));
+            if (decoded == null) {
+                throw new IOException("No ImageIO reader could decode the image.");
+            }
+
+            BufferedImage normalized = resizeAndFlatten(decoded);
+            return encodeJpeg(normalized);
+        } catch (IOException e) {
+            throw new ReviewImageProcessingException(e);
+        }
+    }
+
+    private String cacheKey(String objectName) {
+        int maxEdge = positiveOrDefault(claudeProperties.getReviewImageMaxEdge(), 512);
+        return objectName + '\0' + maxEdge + '\0' + JPEG_QUALITY;
     }
 
     private BufferedImage resizeAndFlatten(BufferedImage source) {
@@ -284,5 +354,12 @@ public class ReviewImageProcessor {
     private enum ImagePriority {
         DIRECT,
         NEIGHBORING
+    }
+
+    private static final class ReviewImageProcessingException extends RuntimeException {
+
+        private ReviewImageProcessingException(IOException cause) {
+            super(cause);
+        }
     }
 }
