@@ -116,6 +116,49 @@ class GoogleAiImageProviderTest {
     }
 
     @Test
+    void placesProductReferencesLastAndOmitsShotDescriptionForProductCut() {
+        List<GoogleAiImageProvider.ReferenceImage> references = List.of(
+                reference("productImages[0]", "PRODUCT_FRONT"),
+                reference("backgroundImage", "BACKGROUND_REFERENCE"),
+                new GoogleAiImageProvider.ReferenceImage(
+                        "shotReferenceImage",
+                        "SHOT_COMPOSITION_REFERENCE",
+                        "다른 상품의 색상과 로고가 포함된 긴 샷 설명",
+                        new byte[]{1},
+                        "image/png"
+                ),
+                reference("productImages[1]", "PRODUCT_BACK")
+        );
+
+        Map<String, Object> requestBody = provider.buildRequestBody(
+                "compiled prompt",
+                references,
+                "3:4",
+                "[FINAL NON-NEGOTIABLE OUTPUT CONSTRAINTS]"
+        );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> contents =
+                (List<Map<String, Object>>) requestBody.get("contents");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> parts =
+                (List<Map<String, Object>>) contents.get(0).get("parts");
+
+        String backgroundInstruction = parts.get(1).get("text").toString();
+        String shotInstruction = parts.get(3).get("text").toString();
+        String productFrontInstruction = parts.get(5).get("text").toString();
+        String productBackInstruction = parts.get(7).get("text").toString();
+
+        assertTrue(backgroundInstruction.contains("BACKGROUND_REFERENCE"));
+        assertTrue(shotInstruction.contains("SHOT_COMPOSITION_REFERENCE"));
+        assertFalse(shotInstruction.contains("다른 상품의 색상과 로고"));
+        assertFalse(shotInstruction.contains("Composition-only description"));
+        assertTrue(productFrontInstruction.contains("PRODUCT_FRONT"));
+        assertTrue(productBackInstruction.contains("PRODUCT_BACK"));
+        assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
+    }
+
+    @Test
     void parsesGeneratedImageDimensionsForAspectRatioValidation() throws Exception {
         BufferedImage source = new BufferedImage(768, 1344, BufferedImage.TYPE_INT_RGB);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
