@@ -68,6 +68,26 @@ public class ImageGenerationService {
             "NEUTRAL", "뉴트럴",
             "COOL", "쿨톤"
     );
+    private static final Map<String, String> COLOR_TEMPERATURE_INSTRUCTIONS = Map.of(
+            "WARM", """
+                    Set the scene color temperature to 3200K with a warm beige/ivory base similar to HEX #E8DECF.
+                    Use soft warm lighting with a gentle golden highlight.
+                    Do not introduce cool, bluish, cyan, or cold ambient light.
+                    Preserve the product's inherent color, logo, material, and details without recoloring them.
+                    """.strip(),
+            "NEUTRAL", """
+                    Set the scene color temperature to 5500K balanced daylight with a light gray base similar to HEX #E0E0E0.
+                    Use pure, clean, balanced lighting without a color bias.
+                    Do not introduce warm, yellowish, or distinctly blue ambient light.
+                    Preserve the product's inherent color, logo, material, and details without recoloring them.
+                    """.strip(),
+            "COOL", """
+                    Set the scene color temperature to 6500K with a pale blue base similar to HEX #C4D1DE.
+                    Use clear, cool lighting and make the product look naturally integrated within the cool scene.
+                    Do not introduce warm, yellowish, beige, or orange ambient light.
+                    Preserve the product's inherent color, logo, material, and details without recoloring them.
+                    """.strip()
+    );
     private static final Map<String, String> CAMERA_ANGLE_LABELS = Map.of(
             "EYE_LEVEL_FRONT", "정면",
             "LEFT_THREE_QUARTER_45", "좌측 45도 사선",
@@ -624,18 +644,18 @@ public class ImageGenerationService {
     }
 
     private String buildUserOptionsInstruction(String cutType, JsonNode userOptions) {
-        String colorTemperature = optionLabel(
-                userOptions,
-                "colorTemperature",
-                COLOR_TEMPERATURE_LABELS
-        );
+        String colorTemperature = optionValue(userOptions, "colorTemperature");
         String cameraAngle = optionValue(userOptions, "cameraAngle");
         String framing = optionValue(userOptions, "framing");
         String aspectRatio = resolveAspectRatio(userOptions);
 
         List<String> instructions = new ArrayList<>();
         if (colorTemperature != null) {
-            instructions.add("- 전체 이미지의 색온도는 " + colorTemperature + " 기반으로 유지한다.");
+            String colorTemperatureInstruction = COLOR_TEMPERATURE_INSTRUCTIONS.get(colorTemperature);
+            if (colorTemperatureInstruction == null) {
+                throw new IllegalArgumentException("지원하지 않는 색온도입니다: " + colorTemperature);
+            }
+            instructions.add("- " + colorTemperatureInstruction.replace("\n", "\n- "));
         }
 
         if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {

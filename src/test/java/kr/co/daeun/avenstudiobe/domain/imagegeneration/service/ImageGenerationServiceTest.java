@@ -136,7 +136,10 @@ class ImageGenerationServiceTest {
 
         String instruction = invokeUserOptionsInstruction("MODEL_CUT", userOptions);
 
-        assertTrue(instruction.contains("색온도는 쿨톤 기반으로 유지한다"));
+        assertTrue(instruction.contains("6500K"));
+        assertTrue(instruction.contains("HEX #C4D1DE"));
+        assertTrue(instruction.contains("Do not introduce warm, yellowish, beige, or orange ambient light"));
+        assertTrue(instruction.contains("Preserve the product's inherent color"));
         assertTrue(instruction.contains("카메라를 모델의 신체 정면 앞에 배치한다"));
         assertTrue(instruction.contains("피사체가 사선이나 후면으로 회전하지 않도록 한다"));
         assertTrue(instruction.contains("머리부터 무릎 아래까지 보이게 한다"));
@@ -301,10 +304,27 @@ class ImageGenerationServiceTest {
 
         String instruction = invokeUserOptionsInstruction("PRODUCT_CUT", userOptions);
 
-        assertTrue(instruction.contains("색온도는 뉴트럴 기반으로 유지한다"));
+        assertTrue(instruction.contains("5500K balanced daylight"));
+        assertTrue(instruction.contains("HEX #E0E0E0"));
+        assertTrue(instruction.contains("without a color bias"));
         assertTrue(instruction.contains("화면 비율은 반드시 1:1로 생성한다"));
         assertFalse(instruction.contains("카메라 각도"));
         assertFalse(instruction.contains("전신 구도"));
+    }
+
+    @Test
+    void warmColorTemperatureUsesDetailedSceneDirection() throws Exception {
+        JsonNode userOptions = objectMapper.readTree("""
+                {"colorTemperature":"WARM"}
+                """);
+
+        String instruction = invokeUserOptionsInstruction("PRODUCT_CUT", userOptions);
+
+        assertTrue(instruction.contains("3200K"));
+        assertTrue(instruction.contains("HEX #E8DECF"));
+        assertTrue(instruction.contains("gentle golden highlight"));
+        assertTrue(instruction.contains("Do not introduce cool, bluish, cyan, or cold ambient light"));
+        assertTrue(instruction.contains("Preserve the product's inherent color"));
     }
 
     @Test
