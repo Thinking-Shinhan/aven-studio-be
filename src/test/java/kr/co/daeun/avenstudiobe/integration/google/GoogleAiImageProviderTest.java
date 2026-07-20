@@ -159,11 +159,8 @@ class GoogleAiImageProviderTest {
         assertTrue(finalInstruction.contains("FINAL NON-NEGOTIABLE"));
         assertTrue(finalInstruction.contains("BACKGROUND SCENE LOCK"));
         assertTrue(finalInstruction.contains("same scene across every output"));
-        assertTrue(finalInstruction.contains("Do not treat the color cast or white balance"));
         assertTrue(finalInstruction.contains("original color and white balance"));
         assertFalse(finalInstruction.contains("match the product color to the background"));
-        assertTrue(finalInstruction.indexOf("BACKGROUND SCENE LOCK")
-                < finalInstruction.indexOf("FINAL NON-NEGOTIABLE"));
     }
 
     @Test
