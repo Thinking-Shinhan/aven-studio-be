@@ -33,10 +33,10 @@ $cookie = New-Object System.Net.Cookie(
 $session.Cookies.Add($cookie)
 
 $headers = @{
-    "Content-Type" = "application/json"
+    "Content-Type" = "application/json; charset=utf-8"
 }
 $resolvedRequestFile = (Resolve-Path -LiteralPath $RequestFile).Path
-$requestBody = Get-Content -LiteralPath $resolvedRequestFile -Raw
+$requestBody = Get-Content -LiteralPath $resolvedRequestFile -Raw -Encoding UTF8
 $requestSha256 = (Get-FileHash -LiteralPath $resolvedRequestFile -Algorithm SHA256).Hash.ToLowerInvariant()
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $gitCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null)
@@ -52,7 +52,8 @@ function Get-MetricSnapshot {
             $response = Invoke-RestMethod `
                 -Uri "$BaseUrl/actuator/metrics/$encodedName" `
                 -Method Get `
-                -Headers $headers
+                -Headers $headers `
+                -WebSession $session
             foreach ($measurement in $response.measurements) {
                 if ($measurement.statistic -eq "COUNT") {
                     $count = [double]$measurement.value
@@ -86,6 +87,7 @@ function Invoke-ReviewRequest {
             -Uri "$BaseUrl/detail-pages/review-copy" `
             -Method Post `
             -Headers $headers `
+            -WebSession $session `
             -Body $requestBody `
             -UseBasicParsing
         $statusCode = [int]$response.StatusCode
