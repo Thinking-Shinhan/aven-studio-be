@@ -93,7 +93,26 @@ class ImageGenerationServiceTest {
         assertTrue(instruction.contains("shotReferenceImage = SHOT_COMPOSITION_REFERENCE"));
         assertTrue(instruction.contains("Never use the product shown inside SHOT_COMPOSITION_REFERENCE"));
         assertTrue(instruction.contains("The final product must be the exact product from GARMENT_REFERENCE"));
+        assertTrue(instruction.contains("BACKGROUND_REFERENCE background scene"));
+        assertTrue(instruction.contains("SHOT_COMPOSITION_REFERENCE product composition"));
+        assertFalse(instruction.contains("SHOT_COMPOSITION_REFERENCE composition and presentation"));
         assertFalse(instruction.contains("Only one model may appear"));
+    }
+
+    @Test
+    void productCutFinalConstraintRepeatsProductAccuracyAfterReferences() throws Exception {
+        String instruction = invokeFinalOutputInstruction(
+                "PRODUCT_CUT",
+                null,
+                null,
+                "3:4"
+        );
+
+        assertTrue(instruction.contains("PRODUCT IDENTITY AND ACCURACY"));
+        assertTrue(instruction.contains("GARMENT_REFERENCE is the only source of truth"));
+        assertTrue(instruction.contains("Preserve its actual category, color, silhouette"));
+        assertTrue(instruction.contains("must never recolor, blur, simplify, redesign, or remove"));
+        assertTrue(instruction.contains("vertical portrait image with an exact 3:4 aspect ratio"));
     }
 
     @Test

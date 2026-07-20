@@ -679,7 +679,17 @@ public class ImageGenerationService {
         List<String> sections = new ArrayList<>();
         sections.add("[FINAL NON-NEGOTIABLE OUTPUT CONSTRAINTS]");
 
-        if (!"PRODUCT_CUT".equals(normalizeValue(cutType))) {
+        if ("PRODUCT_CUT".equals(normalizeValue(cutType))) {
+            sections.add("""
+                    PRODUCT IDENTITY AND ACCURACY:
+                    GARMENT_REFERENCE is the only source of truth for the final product.
+                    The final product must be the exact product shown in GARMENT_REFERENCE.
+                    Preserve its actual category, color, silhouette, proportions, logo shape and position, text, pattern, material, texture, seams, construction, and details.
+                    Never copy, blend, or substitute any product identity from SHOT_COMPOSITION_REFERENCE or BACKGROUND_REFERENCE.
+                    Background harmonization may adjust only surrounding light and contact shadow. It must never recolor, blur, simplify, redesign, or remove any product detail.
+                    If any shot, background, brand mood, or user instruction conflicts with product accuracy, preserve GARMENT_REFERENCE first.
+                    """.strip());
+        } else {
             String cameraInstruction = cameraAngle == null
                     ? null
                     : FINAL_CAMERA_INSTRUCTIONS.get(cameraAngle);
@@ -742,8 +752,8 @@ public class ImageGenerationService {
                     Never swap the role of each reference image.
 
                     GARMENT_REFERENCE is the only product identity and product accuracy reference.
-                    SHOT_COMPOSITION_REFERENCE is only the composition, crop, placement, view, lighting, and presentation reference.
-                    BACKGROUND_REFERENCE is only the spatial mood and atmosphere reference.
+                    BACKGROUND_REFERENCE is only the background color, material, lighting, depth, shadow, and atmosphere reference.
+                    SHOT_COMPOSITION_REFERENCE is only the product view, camera composition, crop, placement, and detail emphasis reference.
 
                     Never use the product shown inside SHOT_COMPOSITION_REFERENCE as the final product.
                     Never copy its design, category, color, logo, text, pattern, material, or decoration.
@@ -755,8 +765,8 @@ public class ImageGenerationService {
 
                     Priority order:
                     1. GARMENT_REFERENCE product accuracy
-                    2. SHOT_COMPOSITION_REFERENCE composition and presentation
-                    3. BACKGROUND_REFERENCE spatial mood and atmosphere
+                    2. BACKGROUND_REFERENCE background scene
+                    3. SHOT_COMPOSITION_REFERENCE product composition
                     4. Brand mood
                     5. User selected options
                     """;
@@ -901,7 +911,8 @@ public class ImageGenerationService {
                 Do not add pockets, zippers, buttons, labels, graphics, patterns, decorations, or logos that are not visible in productImages.
 
                 shotReferenceImage = SHOT_COMPOSITION_REFERENCE.
-                Use shotReferenceImage only for the requested product view, camera composition, crop level, product placement, lighting direction, background presentation, and detail emphasis.
+                Use shotReferenceImage only for the requested product view, camera composition, crop level, product placement, and detail emphasis.
+                Ignore its background color, background material, lighting direction, shadow style, spatial mood, and atmosphere.
                 The product visible inside shotReferenceImage is not the target product.
                 Never copy or preserve its product design, category, color, logo, text, pattern, material, or decoration.
                 Replace it completely with the exact product from productImages while retaining only the shot presentation.
@@ -909,6 +920,8 @@ public class ImageGenerationService {
                 backgroundImage = BACKGROUND_REFERENCE.
                 Use backgroundImage only for background color, lighting feeling, spatial depth, material mood, and atmosphere.
                 Do not copy products, people, text, logos, signs, or unnecessary objects from backgroundImage.
+                Harmonize only the surrounding light and contact shadow.
+                Never recolor, blur, simplify, redesign, or remove product details while matching the background.
 
                 [OUTPUT CONDITIONS]
                 The final result must be one complete premium ecommerce product image.
