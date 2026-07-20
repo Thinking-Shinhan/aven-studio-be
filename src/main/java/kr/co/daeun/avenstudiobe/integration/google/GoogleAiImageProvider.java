@@ -132,7 +132,7 @@ public class GoogleAiImageProvider {
         ));
 
         if (referenceImages != null) {
-            for (ReferenceImage referenceImage : referenceImages) {
+            for (ReferenceImage referenceImage : orderProductCutReferences(referenceImages)) {
                 parts.add(Map.of(
                         "text", buildReferenceRoleInstruction(referenceImage)
                 ));
@@ -152,6 +152,30 @@ public class GoogleAiImageProvider {
         }
 
         return parts;
+    }
+
+    private List<ReferenceImage> orderProductCutReferences(List<ReferenceImage> referenceImages) {
+        boolean hasShotComposition = referenceImages.stream()
+                .anyMatch(reference -> "SHOT_COMPOSITION_REFERENCE".equals(reference.role()));
+        if (!hasShotComposition) {
+            return referenceImages;
+        }
+
+        List<ReferenceImage> ordered = new ArrayList<>(referenceImages.size());
+        referenceImages.stream()
+                .filter(reference -> !isProductAccuracyReference(reference))
+                .forEach(ordered::add);
+        referenceImages.stream()
+                .filter(this::isProductAccuracyReference)
+                .forEach(ordered::add);
+        return ordered;
+    }
+
+    private boolean isProductAccuracyReference(ReferenceImage referenceImage) {
+        return switch (referenceImage.role()) {
+            case "PRODUCT_FRONT", "PRODUCT_BACK", "GARMENT_REFERENCE" -> true;
+            default -> false;
+        };
     }
 
     private String buildReferenceRoleInstruction(ReferenceImage referenceImage) {
@@ -193,7 +217,6 @@ public class GoogleAiImageProvider {
                     Never alter the target product's actual color, logo, text, pattern, material, texture, seams, construction, or silhouette to match the background.
                     """.strip();
             case "SHOT_COMPOSITION_REFERENCE" -> header
-                    + buildRoleScopedDescription("Composition-only description", referenceImage.description())
                     + "\n" + """
                     Use this image only for product view, camera composition, crop, placement, and detail emphasis.
                     Ignore its background color, background material, lighting, shadow, atmosphere, and product identity.
