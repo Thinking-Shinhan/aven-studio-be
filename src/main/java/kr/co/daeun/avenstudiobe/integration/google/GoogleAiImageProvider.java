@@ -156,11 +156,12 @@ public class GoogleAiImageProvider {
 
     private String buildReferenceRoleInstruction(ReferenceImage referenceImage) {
         String header = "Reference image key: " + referenceImage.key()
-                + "\nReference role: " + referenceImage.role()
-                + buildReferenceDescription(referenceImage);
+                + "\nReference role: " + referenceImage.role();
 
         return switch (referenceImage.role()) {
-            case "POSE_REFERENCE" -> header + "\n" + """
+            case "POSE_REFERENCE" -> header
+                    + buildRoleScopedDescription("Pose-only description", referenceImage.description())
+                    + "\n" + """
                     This image is POSE_REFERENCE.
                     Extract only the relative arrangement of the head, torso, arms, hands, legs, and feet.
                     Do not copy the camera position or visible front-facing viewpoint from this image.
@@ -180,30 +181,32 @@ public class GoogleAiImageProvider {
                     + "Use this image as the garment rear accuracy reference, including rear silhouette, seams, and details.";
             case "GARMENT_REFERENCE" -> header + "\n"
                     + "Use this image only for garment identity, structure, color, material, and construction accuracy.";
-            case "BACKGROUND_REFERENCE" -> header + "\n"
-                    + """
+            case "BACKGROUND_REFERENCE" -> header
+                    + buildRoleScopedDescription("Background scene description", referenceImage.description())
+                    + "\n" + """
                     This image is BACKGROUND_REFERENCE.
                     Use it as a background scene recipe, not as a literal background plate.
                     Do not directly copy or paste this exact image.
                     Extract only the reusable studio environment: color family, surface material, lighting softness, spatial depth, and shadow style.
-                    The final product or model must be harmonized with the recreated scene using coherent lighting, contact shadow, perspective, and color temperature.
+                    Harmonize only the surrounding light, contact shadow, perspective, and background color temperature.
+                    Never alter the target product's actual color, logo, text, pattern, material, texture, seams, construction, or silhouette to match the background.
                     """.strip();
-            case "SHOT_COMPOSITION_REFERENCE" -> header + "\n"
-                    + "Use this image only for shot composition and presentation. Never copy the product shown in it.";
+            case "SHOT_COMPOSITION_REFERENCE" -> header
+                    + buildRoleScopedDescription("Composition-only description", referenceImage.description())
+                    + "\n" + """
+                    Use this image only for product view, camera composition, crop, placement, and detail emphasis.
+                    Ignore its background color, background material, lighting, shadow, atmosphere, and product identity.
+                    Never copy the product shown in it.
+                    """.strip();
             default -> header;
         };
     }
 
-    private String buildReferenceDescription(ReferenceImage referenceImage) {
-        if (referenceImage.description() == null || referenceImage.description().isBlank()) {
+    private String buildRoleScopedDescription(String label, String description) {
+        if (description == null || description.isBlank()) {
             return "";
         }
-
-        if ("BACKGROUND_REFERENCE".equals(referenceImage.role())) {
-            return "\nBackground scene description: " + referenceImage.description().trim();
-        }
-
-        return "\nReference description: " + referenceImage.description().trim();
+        return "\n" + label + ": " + description.trim();
     }
 
     public String getImageModel() {

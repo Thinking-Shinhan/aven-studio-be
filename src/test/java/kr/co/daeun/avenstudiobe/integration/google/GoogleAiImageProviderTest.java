@@ -68,7 +68,13 @@ class GoogleAiImageProviderTest {
         List<GoogleAiImageProvider.ReferenceImage> references = List.of(
                 reference("poseImage", "POSE_REFERENCE"),
                 reference("modelImage", "MODEL_REFERENCE"),
-                reference("productImages[0]", "PRODUCT_FRONT"),
+                new GoogleAiImageProvider.ReferenceImage(
+                        "productImages[0]",
+                        "PRODUCT_FRONT",
+                        "웜톤으로 보정된 생성 이미지",
+                        new byte[]{1},
+                        "image/png"
+                ),
                 reference("productImages[1]", "PRODUCT_BACK"),
                 new GoogleAiImageProvider.ReferenceImage(
                         "backgroundImage",
@@ -99,9 +105,11 @@ class GoogleAiImageProviderTest {
         assertTrue(parts.get(3).get("text").toString().contains("non-negotiable identity reference"));
         assertTrue(parts.get(3).get("text").toString().contains("same exact person"));
         assertTrue(parts.get(5).get("text").toString().contains("garment front accuracy"));
+        assertFalse(parts.get(5).get("text").toString().contains("웜톤으로 보정된 생성 이미지"));
         assertTrue(parts.get(7).get("text").toString().contains("garment rear accuracy"));
         assertTrue(parts.get(9).get("text").toString().contains("Background scene description"));
         assertTrue(parts.get(9).get("text").toString().contains("background scene recipe"));
+        assertTrue(parts.get(9).get("text").toString().contains("Never alter the target product's actual color"));
         assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
     }
 
