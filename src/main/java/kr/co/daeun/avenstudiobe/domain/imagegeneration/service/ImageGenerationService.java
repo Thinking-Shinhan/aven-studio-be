@@ -1004,6 +1004,7 @@ public class ImageGenerationService {
                 key,
                 "assetId " + asset.getId(),
                 resolveReferenceRole(key, asset.getAssetRole()),
+                asset.getDescription(),
                 gcsService.download(asset.getObjectName()),
                 asset.getContentType()
         ));
@@ -1024,6 +1025,7 @@ public class ImageGenerationService {
                 key,
                 "referenceAssetId " + referenceAsset.getId() + " (" + referenceAsset.getReferenceKey() + ")",
                 resolveReferenceRole(key, null),
+                referenceAsset.getDescription(),
                 readReferenceAssetBytes(referenceAsset),
                 referenceAsset.getContentType()
         ));
@@ -1158,6 +1160,7 @@ public class ImageGenerationService {
                         + ", productId=" + nullToText(productId)
                         + ", assetId " + asset.getId(),
                 "OUTFIT_PRODUCT_REFERENCE_" + role + "_" + wearingPart,
+                asset.getDescription(),
                 gcsService.download(asset.getObjectName()),
                 asset.getContentType()
         ));
@@ -1186,6 +1189,7 @@ public class ImageGenerationService {
                 .map(referenceAsset -> new GoogleAiImageProvider.ReferenceImage(
                         referenceAsset.key(),
                         referenceAsset.role(),
+                        referenceAsset.description(),
                         referenceAsset.bytes(),
                         referenceAsset.contentType()
                 ))
@@ -1485,6 +1489,7 @@ public class ImageGenerationService {
             String key,
             String sourceLabel,
             String role,
+            String description,
             byte[] bytes,
             String contentType
     ) {
