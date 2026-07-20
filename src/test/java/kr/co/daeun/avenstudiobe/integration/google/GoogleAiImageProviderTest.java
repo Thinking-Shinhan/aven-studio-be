@@ -69,7 +69,14 @@ class GoogleAiImageProviderTest {
                 reference("poseImage", "POSE_REFERENCE"),
                 reference("modelImage", "MODEL_REFERENCE"),
                 reference("productImages[0]", "PRODUCT_FRONT"),
-                reference("productImages[1]", "PRODUCT_BACK")
+                reference("productImages[1]", "PRODUCT_BACK"),
+                new GoogleAiImageProvider.ReferenceImage(
+                        "backgroundImage",
+                        "BACKGROUND_REFERENCE",
+                        "따뜻한 베이지 톤의 무광 스튜디오 배경과 부드러운 접지 그림자.",
+                        new byte[]{1},
+                        "image/png"
+                )
         );
 
         Map<String, Object> requestBody = provider.buildRequestBody(
@@ -93,6 +100,8 @@ class GoogleAiImageProviderTest {
         assertTrue(parts.get(3).get("text").toString().contains("same exact person"));
         assertTrue(parts.get(5).get("text").toString().contains("garment front accuracy"));
         assertTrue(parts.get(7).get("text").toString().contains("garment rear accuracy"));
+        assertTrue(parts.get(9).get("text").toString().contains("Background scene description"));
+        assertTrue(parts.get(9).get("text").toString().contains("background scene recipe"));
         assertTrue(parts.get(parts.size() - 1).get("text").toString().contains("FINAL NON-NEGOTIABLE"));
     }
 
@@ -127,7 +136,7 @@ class GoogleAiImageProviderTest {
     }
 
     private GoogleAiImageProvider.ReferenceImage reference(String key, String role) {
-        return new GoogleAiImageProvider.ReferenceImage(key, role, new byte[]{1}, "image/png");
+        return new GoogleAiImageProvider.ReferenceImage(key, role, null, new byte[]{1}, "image/png");
     }
 
     private GoogleAiProperties properties() {

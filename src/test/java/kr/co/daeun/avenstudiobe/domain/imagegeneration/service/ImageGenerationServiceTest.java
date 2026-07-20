@@ -703,6 +703,7 @@ class ImageGenerationServiceTest {
                 String.class,
                 String.class,
                 String.class,
+                String.class,
                 byte[].class,
                 String.class
         );
@@ -711,6 +712,7 @@ class ImageGenerationServiceTest {
                 "poseImage",
                 "pose reference",
                 "POSE_REFERENCE",
+                "팔다리 배치만 참고하는 포즈 설명.",
                 new byte[]{1},
                 "image/png"
         );

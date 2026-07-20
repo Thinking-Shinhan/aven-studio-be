@@ -156,7 +156,8 @@ public class GoogleAiImageProvider {
 
     private String buildReferenceRoleInstruction(ReferenceImage referenceImage) {
         String header = "Reference image key: " + referenceImage.key()
-                + "\nReference role: " + referenceImage.role();
+                + "\nReference role: " + referenceImage.role()
+                + buildReferenceDescription(referenceImage);
 
         return switch (referenceImage.role()) {
             case "POSE_REFERENCE" -> header + "\n" + """
@@ -180,11 +181,29 @@ public class GoogleAiImageProvider {
             case "GARMENT_REFERENCE" -> header + "\n"
                     + "Use this image only for garment identity, structure, color, material, and construction accuracy.";
             case "BACKGROUND_REFERENCE" -> header + "\n"
-                    + "Use this image only for background space, lighting, depth, material mood, and atmosphere.";
+                    + """
+                    This image is BACKGROUND_REFERENCE.
+                    Use it as a background scene recipe, not as a literal background plate.
+                    Do not directly copy or paste this exact image.
+                    Extract only the reusable studio environment: color family, surface material, lighting softness, spatial depth, and shadow style.
+                    The final product or model must be harmonized with the recreated scene using coherent lighting, contact shadow, perspective, and color temperature.
+                    """.strip();
             case "SHOT_COMPOSITION_REFERENCE" -> header + "\n"
                     + "Use this image only for shot composition and presentation. Never copy the product shown in it.";
             default -> header;
         };
+    }
+
+    private String buildReferenceDescription(ReferenceImage referenceImage) {
+        if (referenceImage.description() == null || referenceImage.description().isBlank()) {
+            return "";
+        }
+
+        if ("BACKGROUND_REFERENCE".equals(referenceImage.role())) {
+            return "\nBackground scene description: " + referenceImage.description().trim();
+        }
+
+        return "\nReference description: " + referenceImage.description().trim();
     }
 
     public String getImageModel() {
@@ -277,6 +296,7 @@ public class GoogleAiImageProvider {
     public record ReferenceImage(
             String key,
             String role,
+            String description,
             byte[] bytes,
             String contentType
     ) {
