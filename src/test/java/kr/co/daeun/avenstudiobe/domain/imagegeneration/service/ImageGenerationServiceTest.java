@@ -197,6 +197,10 @@ class ImageGenerationServiceTest {
         );
 
         assertTrue(instruction.contains("FINAL NON-NEGOTIABLE OUTPUT CONSTRAINTS"));
+        assertTrue(instruction.contains("PERSON IDENTITY"));
+        assertTrue(instruction.contains("MODEL_REFERENCE identity is a non-negotiable constraint"));
+        assertTrue(instruction.contains("The final person must be the same exact person as MODEL_REFERENCE"));
+        assertTrue(instruction.contains("Do not generate a different person"));
         assertTrue(instruction.contains("camera must be directly behind the stationary subject"));
         assertTrue(instruction.contains("back of the head"));
         assertTrue(instruction.contains("face, chest, and garment front must not be visible"));
