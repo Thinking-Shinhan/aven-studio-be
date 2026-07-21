@@ -39,7 +39,7 @@ public class CopyPromptBuilder {
                 - If referenceAssets exists, prioritize the image descriptions when writing the copy.
                 - Do not repeat the same product feature or benefit already used in earlier copy.
                 - Do not infer functions, effects, materials, or details that are not present in the product information.
-                - Write each content value within recommendedMaxLength, counting characters including spaces.
+                - Make full use of recommendedMaxLength: aim for roughly 80-100% of it and never exceed it, counting characters including spaces. Do not stop at a short, single safe line when more length is available.
                 - Use instanceKey and slotKey exactly as provided in the input.
 
                 Output format:
