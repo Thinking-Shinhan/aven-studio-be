@@ -265,5 +265,5 @@ GCS 기능을 사용하려면 `aven-studio-assets` 버킷에 접근할 수 있�
 | :---: | :---: | :---: | :---: |
 | 강은우 | 김형주 | 이다은 | 김유희 |
 
-- **김형주 (Backend)** — Image Generation, Brands, Assets, Library 일부
-- **이다은 (Backend)** — Auth, Products, Sheets, Detail Page, Library 일부 등 나머지 백엔드 도메인
+- **김형주 (Backend)** — Image Generation, Brands, Assets, Library 
+- **이다은 (Backend)** — Auth, Products, Sheets, Detail Page, Library 
