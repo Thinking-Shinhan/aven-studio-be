@@ -146,6 +146,12 @@ Google Sheets를 브랜드에 연결해 상품 데이터를 동기화합니다. 
 
 ## 기술 스택
 
+<div align="center">
+<img src="./기술스택.png" alt="MOODITOR 기술 스택" width="100%" />
+</div>
+
+<br />
+
 **Core**
 
 `Java 17` · `Spring Boot 4.1` · `Gradle`
@@ -170,17 +176,9 @@ Google Sheets를 브랜드에 연결해 상품 데이터를 동기화합니다. 
 
 ## 아키텍처
 
-```text
-Client
-  └─ HttpOnly Cookie (Access / Refresh Token)
-       ↓
-Spring Security Filter Chain
-  └─ JwtFilter → Controller → Service
-                                      ├─ Repository → PostgreSQL (Supabase)
-                                      ├─ Google Cloud Storage
-                                      ├─ Google Sheets API
-                                      └─ Gemini / Claude API
-```
+<div align="center">
+<img src="./아키텍처.png" alt="MOODITOR 시스템 아키텍처" width="100%" />
+</div>
 
 <br />
 
