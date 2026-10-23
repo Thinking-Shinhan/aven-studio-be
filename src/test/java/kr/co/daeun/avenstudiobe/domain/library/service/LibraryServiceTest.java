@@ -1,0 +1,261 @@
+package kr.co.daeun.avenstudiobe.domain.library.service;
+
+import kr.co.daeun.avenstudiobe.domain.asset.entity.Asset;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.AssetRepository;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryAssetProjection;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryImageFolderProjection;
+import kr.co.daeun.avenstudiobe.domain.asset.repository.LibraryPreviewImageProjection;
+import kr.co.daeun.avenstudiobe.domain.detailpage.entity.DetailPage;
+import kr.co.daeun.avenstudiobe.domain.detailpage.repository.DetailPageRepository;
+import kr.co.daeun.avenstudiobe.domain.library.dto.DetailPageRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.ImageFolderListRespDto;
+import kr.co.daeun.avenstudiobe.domain.library.dto.LibraryAssetListRespDto;
+import kr.co.daeun.avenstudiobe.domain.product.entity.Product;
+import kr.co.daeun.avenstudiobe.domain.product.repository.ProductRepository;
+import kr.co.daeun.avenstudiobe.domain.product.service.ProductService;
+import kr.co.daeun.avenstudiobe.global.exception.LibraryAssetNotFoundException;
+import kr.co.daeun.avenstudiobe.global.exception.LibraryFolderNotFoundException;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.core.Authentication;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class LibraryServiceTest {
+
+    private AssetRepository assetRepository;
+    private ProductRepository productRepository;
+    private GcsService gcsService;
+    private ProductService productService;
+    private DetailPageRepository detailPageRepository;
+    private LibraryService libraryService;
+
+    @BeforeEach
+    void setUp() {
+        assetRepository = mock(AssetRepository.class);
+        productRepository = mock(ProductRepository.class);
+        gcsService = mock(GcsService.class);
+        productService = mock(ProductService.class);
+        detailPageRepository = mock(DetailPageRepository.class);
+        libraryService = new LibraryService(assetRepository, productRepository, gcsService, productService, detailPageRepository);
+    }
+
+    @Test
+    void returnsImageFoldersWithPreviewsCountsAndUpdatedAt() {
+        LibraryImageFolderProjection folder = mock(LibraryImageFolderProjection.class);
+        LibraryPreviewImageProjection preview = mock(LibraryPreviewImageProjection.class);
+        LocalDateTime updatedAt = LocalDateTime.of(2026, 7, 15, 10, 30);
+
+        when(folder.getProductId()).thenReturn(10L);
+        when(folder.getProductCode()).thenReturn("AVN-TS-001");
+        when(folder.getProductName()).thenReturn("카라넥 반팔 폴로 셔츠");
+        when(folder.getCategory()).thenReturn("상의");
+        when(folder.getModelCutCount()).thenReturn(8L);
+        when(folder.getProductCutCount()).thenReturn(4L);
+        when(folder.getDetailPageCount()).thenReturn(1L);
+        when(folder.getUpdatedAt()).thenReturn(updatedAt);
+
+        when(preview.getProductId()).thenReturn(10L);
+        when(preview.getAssetId()).thenReturn(207L);
+        when(preview.getObjectName()).thenReturn("generated/10/20/image.png");
+
+        when(assetRepository.findLibraryImageFolders(1L, "상의")).thenReturn(List.of(folder));
+        when(assetRepository.findLibraryPreviewImages(List.of(10L))).thenReturn(List.of(preview));
+        when(gcsService.generateSignedUrl("generated/10/20/image.png")).thenReturn("signed-url");
+
+        ImageFolderListRespDto response = libraryService.getImageFolders(1L, "  상의  ");
+
+        assertEquals(1, response.imageFolders().size());
+        var imageFolder = response.imageFolders().get(0);
+        assertEquals(8L, imageFolder.counts().modelCut());
+        assertEquals(4L, imageFolder.counts().productCut());
+        assertEquals(1L, imageFolder.counts().detailPage());
+        assertEquals(13L, imageFolder.counts().total());
+        assertEquals(207L, imageFolder.previewImages().get(0).assetId());
+        assertEquals("signed-url", imageFolder.previewImages().get(0).imageUrl());
+        assertEquals(updatedAt, imageFolder.updatedAt());
+    }
+
+    @Test
+    void separatesGeneratedAssetsByCutTypeWithoutAssetRole() {
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(10L);
+        when(product.getCode()).thenReturn("AVN-TS-001");
+        when(product.getName()).thenReturn("카라넥 반팔 폴로 셔츠");
+        when(product.getCategory()).thenReturn("상의");
+        when(product.getColor()).thenReturn("화이트");
+        when(product.getGender()).thenReturn("F");
+        LibraryAssetProjection modelCut = libraryAsset(
+                200L,
+                "MODEL_CUT",
+                "generated/10/20/model.png",
+                "모델 착장컷."
+        );
+        LibraryAssetProjection productCut = libraryAsset(
+                201L,
+                "PRODUCT_CUT",
+                "generated/10/20/product.png",
+                "제품 단독컷."
+        );
+        when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
+        when(assetRepository.findLibraryAssets(10L, 1L)).thenReturn(List.of(modelCut, productCut));
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.empty());
+        when(gcsService.generateSignedUrl("generated/10/20/model.png")).thenReturn("model-signed-url");
+        when(gcsService.generateSignedUrl("generated/10/20/product.png")).thenReturn("product-signed-url");
+
+        LibraryAssetListRespDto response = libraryService.getFolderAssets(1L, 10L);
+
+        assertEquals("화이트", response.color());
+        assertEquals("F", response.gender());
+        assertFalse(response.hasDetailPage());
+        assertEquals(1, response.modelCutAssets().size());
+        assertEquals(200L, response.modelCutAssets().get(0).assetId());
+        assertEquals("model-signed-url", response.modelCutAssets().get(0).imageUrl());
+        assertTrue(response.modelCutAssets().get(0).isLiked());
+        assertEquals(1, response.productCutAssets().size());
+        assertEquals(201L, response.productCutAssets().get(0).assetId());
+        assertEquals("product-signed-url", response.productCutAssets().get(0).imageUrl());
+    }
+
+    @Test
+    void returnsDetailPageTogetherWithFolderAssets() {
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(10L);
+        when(product.getCode()).thenReturn("AVN-TS-001");
+        when(product.getName()).thenReturn("카라넥 반팔 폴로 셔츠");
+        when(product.getCategory()).thenReturn("상의");
+        when(product.getColor()).thenReturn("화이트");
+        when(product.getGender()).thenReturn("F");
+
+        DetailPage detailPage = DetailPage.create(
+                product,
+                "EXPORTED",
+                "raw-file-url",
+                "detail-pages/10/detail-page.png",
+                "detail-page.png",
+                1024L
+        );
+
+        when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.of(product));
+        when(assetRepository.findLibraryAssets(10L, 1L)).thenReturn(List.of());
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
+        when(gcsService.generateSignedUrl("detail-pages/10/detail-page.png")).thenReturn("detail-page-signed-url");
+
+        LibraryAssetListRespDto response = libraryService.getFolderAssets(1L, 10L);
+
+        assertTrue(response.hasDetailPage());
+        assertEquals("EXPORTED", response.detailPage().getStatus());
+        assertEquals("detail-page-signed-url", response.detailPage().getFileUrl());
+        assertEquals("detail-page.png", response.detailPage().getFileName());
+    }
+
+    @Test
+    void rejectsProductOutsideLoggedInBrand() {
+        when(productRepository.findByIdAndBrand_Id(10L, 1L)).thenReturn(Optional.empty());
+
+        assertThrows(
+                LibraryFolderNotFoundException.class,
+                () -> libraryService.getFolderAssets(1L, 10L)
+        );
+    }
+
+    private LibraryAssetProjection libraryAsset(
+            Long assetId,
+            String cutType,
+            String objectName,
+            String description
+    ) {
+        LibraryAssetProjection asset = mock(LibraryAssetProjection.class);
+        when(asset.getAssetId()).thenReturn(assetId);
+        when(asset.getType()).thenReturn("GENERATED");
+        when(asset.getObjectName()).thenReturn(objectName);
+        when(asset.getDescription()).thenReturn(description);
+        when(asset.getStatus()).thenReturn("GENERATED");
+        when(asset.getIsLiked()).thenReturn(true);
+        when(asset.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 7, 3, 12, 40));
+        when(asset.getCutType()).thenReturn(cutType);
+        return asset;
+    }
+
+    @Test
+    void softDeletesGeneratedAssetAndRemovesGcsObject() {
+        Asset asset = Asset.builder()
+                .id(200L)
+                .type("GENERATED")
+                .status("GENERATED")
+                .objectName("generated/10/20/image.png")
+                .build();
+        when(assetRepository.findByIdAndProduct_Brand_IdAndTypeAndStatus(
+                200L, 1L, "GENERATED", "GENERATED"
+        )).thenReturn(Optional.of(asset));
+
+        var response = libraryService.deleteAsset(1L, 200L);
+
+        verify(gcsService).delete("generated/10/20/image.png");
+        assertEquals("DELETED", asset.getStatus());
+        assertEquals(200L, response.assetId());
+    }
+
+    @Test
+    void rejectsMissingOrForeignAssetWithoutDeletingGcsObject() {
+        when(assetRepository.findByIdAndProduct_Brand_IdAndTypeAndStatus(
+                200L, 1L, "GENERATED", "GENERATED"
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                LibraryAssetNotFoundException.class,
+                () -> libraryService.deleteAsset(1L, 200L)
+        );
+        verify(gcsService, never()).delete("generated/10/20/image.png");
+    }
+
+    @Test
+    void returnsDetailPageWithSignedFileUrlWhenDetailPageExists() {
+        Authentication authentication = mock(Authentication.class);
+        Product product = mock(Product.class);
+        DetailPage detailPage = DetailPage.create(
+                product,
+                "COMPLETED",
+                "raw-file-url",
+                "detail-pages/10/detail.pdf",
+                "detail.pdf",
+                1024L
+        );
+        when(productService.getAccessibleProductForUpdate(10L, authentication)).thenReturn(product);
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.of(detailPage));
+        when(gcsService.generateSignedUrl("detail-pages/10/detail.pdf")).thenReturn("signed-url");
+
+        DetailPageRespDto response = libraryService.getDetailPage(10L, authentication);
+
+        assertEquals(10L, response.getProductId());
+        assertTrue(response.isHasDetailPage());
+        assertEquals("COMPLETED", response.getDetailPage().getStatus());
+        assertEquals("signed-url", response.getDetailPage().getFileUrl());
+        assertEquals("detail.pdf", response.getDetailPage().getFileName());
+    }
+
+    @Test
+    void returnsEmptyDetailPageWhenNoneExistsForProduct() {
+        Authentication authentication = mock(Authentication.class);
+        Product product = mock(Product.class);
+        when(productService.getAccessibleProductForUpdate(10L, authentication)).thenReturn(product);
+        when(detailPageRepository.findByProductId(10L)).thenReturn(Optional.empty());
+
+        DetailPageRespDto response = libraryService.getDetailPage(10L, authentication);
+
+        assertEquals(10L, response.getProductId());
+        assertFalse(response.isHasDetailPage());
+    }
+}

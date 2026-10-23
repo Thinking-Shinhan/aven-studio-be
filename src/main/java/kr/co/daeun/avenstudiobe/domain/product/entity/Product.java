@@ -56,4 +56,72 @@ public class Product {
     @JoinColumn(name = "brand_id")
     private Brand brand;
 
+    @Column(name = "lining")
+    private int lining;
+
+    @Column(name = "elasticity")
+    private int elasticity;
+
+    @Column(name = "transparency")
+    private int transparency;
+
+    @Column(name = "touch_feeling")
+    private int touchFeeling;
+
+    @Column(name = "thickness")
+    private int thickness;
+
+    public static Product create(
+            Brand brand,
+            String code,
+            String name,
+            String category,
+            String gender,
+            String color,
+            int price,
+            String fitDescription,
+            String description,
+            String fabricationDescription,
+            int lining,
+            int elasticity,
+            int transparency,
+            int touch_feeling,
+            int thickness
+    ) {
+        Product product = new Product();
+        product.brand = brand;
+        product.code = code;
+        product.update(name, category, gender, color, price, fitDescription, description, fabricationDescription, lining, elasticity, transparency, touch_feeling, thickness);
+        return product;
+    }
+
+    public void update(
+            String name,
+            String category,
+            String gender,
+            String color,
+            int price,
+            String fitDescription,
+            String description,
+            String fabricationDescription,
+            int lining,
+            int elasticity,
+            int transparency,
+            int touchFeeling,
+            int thickness
+    ) {
+        this.name = name;
+        this.category = category;
+        this.gender = gender;
+        this.color = color;
+        this.price = price;
+        this.fitDescription = fitDescription;
+        this.description = description;
+        this.fabricationDescription = fabricationDescription;
+        this.lining = lining;
+        this.elasticity = elasticity;
+        this.transparency = transparency;
+        this.touchFeeling = touchFeeling;
+        this.thickness = thickness;
+    }
 }

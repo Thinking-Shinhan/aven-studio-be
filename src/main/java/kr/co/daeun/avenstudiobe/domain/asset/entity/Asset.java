@@ -15,12 +15,17 @@ import java.time.LocalDateTime;
 @Builder
 public class Asset {
 
+    private static final String DELETED_STATUS = "DELETED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, length = 30)
     private String type;
+
+    @Column(name = "asset_role", length = 100)
+    private String assetRole;
 
     @Column(name = "file_url", nullable = false, length = 500)
     private String fileUrl;
@@ -58,4 +63,15 @@ public class Asset {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    @Column(name = "is_liked", nullable = false)
+    @Builder.Default
+    private Boolean isLiked = false;
+
+    public void markDeleted() {
+        this.status = DELETED_STATUS;
+    }
+
+    public void toggleIsLiked() {
+        this.isLiked = !Boolean.TRUE.equals(this.isLiked);
+    }
 }

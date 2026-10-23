@@ -50,6 +50,7 @@ create table if not exists products (
 create table if not exists assets (
     id bigserial primary key,
     type varchar(30) not null,
+    asset_role varchar(30),
     file_url varchar(500) not null,
     object_name varchar(500) not null,
     original_filename varchar(255),
@@ -190,6 +191,20 @@ create table if not exists shot_templates (
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz
+);
+
+create table if not exists reference_assets (
+    id bigserial primary key,
+    reference_type varchar(30) not null,
+    reference_key varchar(100) not null unique,
+    name varchar(100) not null,
+    image_url varchar(500) not null,
+    object_name varchar(500),
+    content_type varchar(100),
+    description text,
+    is_active boolean not null default true,
+    sort_order integer not null default 0,
+    created_at timestamptz not null default now()
 );
 
 create table if not exists image_generation_jobs (

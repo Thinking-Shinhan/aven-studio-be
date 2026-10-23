@@ -6,12 +6,22 @@ import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetListRes
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ReferenceAssetRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateListRespDto;
 import kr.co.daeun.avenstudiobe.domain.imagegeneration.dto.ShotTemplateRespDto;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.entity.ReferenceAsset;
+import kr.co.daeun.avenstudiobe.domain.imagegeneration.repository.ReferenceAssetRepository;
+import kr.co.daeun.avenstudiobe.global.storage.GcsService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ImageGenerationOptionService {
+
+    private final ReferenceAssetRepository referenceAssetRepository;
+    private final GcsService gcsService;
 
     public ImageGenerationOptionsRespDto getOptions() {
         return new ImageGenerationOptionsRespDto(
@@ -54,83 +64,69 @@ public class ImageGenerationOptionService {
         );
     }
 
-    public ShotTemplateListRespDto getShotTemplates(String cutType) {
-        String normalizedCutType = normalizeCutType(cutType);
+    public ShotTemplateListRespDto getShotTemplates() {
+        List<ReferenceAsset> templates = referenceAssetRepository
+                .findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc("SHOT_TEMPLATE");
 
-        if ("MODEL_CUT".equals(normalizedCutType)) {
-            return new ShotTemplateListRespDto(normalizedCutType, modelCutShotTemplates());
-        }
+        List<ShotTemplateRespDto> dtos = templates.stream()
+                .map(this::toShotTemplateResponse)
+                .toList();
 
-        return new ShotTemplateListRespDto(normalizedCutType, productCutShotTemplates());
+        return new ShotTemplateListRespDto(dtos);
     }
 
     public ReferenceAssetListRespDto getReferenceAssets(String assetType) {
         String normalizedAssetType = normalizeAssetType(assetType);
 
-        List<ReferenceAssetRespDto> assets = referenceAssets().stream()
-                .filter(asset -> normalizedAssetType == null || normalizedAssetType.equals(asset.getAssetType()))
+        List<ReferenceAsset> referenceAssets = normalizedAssetType == null
+                ? referenceAssetRepository.findByActiveTrueOrderBySortOrderAscIdAsc()
+                : referenceAssetRepository.findByReferenceTypeAndActiveTrueOrderBySortOrderAscIdAsc(normalizedAssetType);
+
+        List<ReferenceAssetRespDto> assets = referenceAssets.stream()
+                .map(this::toReferenceAssetResponse)
                 .toList();
 
         return new ReferenceAssetListRespDto(normalizedAssetType, assets);
     }
 
-    private List<ShotTemplateRespDto> productCutShotTemplates() {
-        return List.of(
-                shot("FRONT", "정면", "PRODUCT_CUT", "상품의 정면 전체가 명확하게 보이는 제품컷으로 생성한다.", "전면 실루엣 확인용"),
-                shot("BACK", "후면", "PRODUCT_CUT", "상품의 후면 전체가 명확하게 보이는 제품컷으로 생성한다.", "후면 실루엣 확인용"),
-                shot("SIDE", "측면", "PRODUCT_CUT", "상품의 측면 구조와 두께감이 보이는 제품컷으로 생성한다.", "측면 구조 확인용"),
-                shot("THREE_QUARTER", "45도", "PRODUCT_CUT", "상품을 45도 사선 각도에서 입체감 있게 보여주는 제품컷으로 생성한다.", "입체 실루엣 확인용"),
-                shot("FLAT_LAY", "플랫레이", "PRODUCT_CUT", "상품을 바닥에 평평하게 놓은 플랫레이 제품컷으로 생성한다.", "전체 형태 확인용"),
-                shot("HANGING", "행잉", "PRODUCT_CUT", "상품을 옷걸이에 건 상태의 행잉 제품컷으로 생성한다.", "걸린 상태 확인용"),
-                shot("TOP_VIEW", "탑뷰", "PRODUCT_CUT", "상품을 위에서 내려다본 탑뷰 제품컷으로 생성한다.", "상단 구조 확인용"),
-                shot("UNDER_BRIM", "챙 안쪽", "PRODUCT_CUT", "모자 챙 안쪽과 하단 구조가 보이는 제품 디테일컷으로 생성한다.", "모자 디테일 확인용"),
-                shot("DETAIL", "디테일", "PRODUCT_CUT", "상품의 핵심 디테일 영역을 확대해서 보여주는 제품 디테일컷으로 생성한다.", "디테일 확대용"),
-                shot("LOGO", "로고", "PRODUCT_CUT", "상품의 로고 위치와 자수 또는 프린트 질감이 보이도록 확대한다.", "로고 확인용"),
-                shot("FABRIC", "소재", "PRODUCT_CUT", "상품 원단의 조직감, 두께감, 표면 질감이 보이도록 확대한다.", "소재 확인용"),
-                shot("CONSTRUCTION", "봉제", "PRODUCT_CUT", "봉제선, 시접, 마감 구조가 보이도록 확대한다.", "구조 확인용")
-        );
-    }
+    @Transactional
+    public ReferenceAssetRespDto uploadReferenceAsset(
+            MultipartFile file,
+            String assetType,
+            String key,
+            String label,
+            String description,
+            Integer sortOrder
+    ) {
+        String normalizedAssetType = normalizeRequiredAssetType(assetType);
+        String normalizedKey = normalizeReferenceKey(key);
+        String normalizedLabel = normalizeLabel(label);
 
-    private List<ShotTemplateRespDto> modelCutShotTemplates() {
-        return List.of(
-                shot("FRONT_STANDING", "정면", "MODEL_CUT", "모델이 정면을 바라보는 자연스러운 착용컷으로 생성한다.", "기본 착용 확인용"),
-                shot("SIDE_STANDING", "측면", "MODEL_CUT", "모델의 측면 실루엣과 상품 핏이 보이는 착용컷으로 생성한다.", "측면 핏 확인용"),
-                shot("BACK_STANDING", "후면", "MODEL_CUT", "모델의 후면 실루엣과 상품 뒷면이 보이는 착용컷으로 생성한다.", "후면 핏 확인용"),
-                shot("WALKING", "워킹", "MODEL_CUT", "모델이 자연스럽게 걷는 활동감 있는 착용컷으로 생성한다.", "활동감 확인용"),
-                shot("SITTING", "앉기", "MODEL_CUT", "모델이 앉아 있는 자세의 착용컷으로 생성한다.", "착석 핏 확인용")
-        );
-    }
-
-    private List<ReferenceAssetRespDto> referenceAssets() {
-        return List.of(
-                referenceAsset("MODEL_RECOMMENDED_01", "MODEL", "추천 모델 1", "서비스가 제공하는 기본 AI 모델", null),
-                referenceAsset("MODEL_UPLOAD", "MODEL", "모델 이미지 업로드", "사용자가 직접 업로드하는 모델 참조 이미지", null),
-                referenceAsset("BACKGROUND_STUDIO", "BACKGROUND", "스튜디오", "깔끔한 스튜디오 배경", null),
-                referenceAsset("BACKGROUND_WHITE", "BACKGROUND", "화이트", "흰색 단색 배경", null),
-                referenceAsset("BACKGROUND_BLACK", "BACKGROUND", "블랙", "검정 단색 배경", null),
-                referenceAsset("BACKGROUND_NATURE", "BACKGROUND", "자연", "자연 분위기의 배경", null),
-                referenceAsset("BACKGROUND_CITY", "BACKGROUND", "도시", "도시적인 배경", null),
-                referenceAsset("BACKGROUND_UPLOAD", "BACKGROUND", "배경 이미지 업로드", "사용자가 직접 업로드하는 배경 참조 이미지", null),
-                referenceAsset("POSE_FRONT", "POSE", "정면", "정면 포즈 참조 이미지", null),
-                referenceAsset("POSE_SIDE", "POSE", "측면", "측면 포즈 참조 이미지", null),
-                referenceAsset("POSE_BACK", "POSE", "후면", "후면 포즈 참조 이미지", null),
-                referenceAsset("POSE_WALKING", "POSE", "워킹", "걷는 포즈 참조 이미지", null),
-                referenceAsset("POSE_SITTING", "POSE", "앉기", "앉은 포즈 참조 이미지", null)
-        );
-    }
-
-    private String normalizeCutType(String cutType) {
-        if (cutType == null || cutType.isBlank()) {
-            return "PRODUCT_CUT";
+        if (referenceAssetRepository.existsByReferenceKey(normalizedKey)) {
+            throw new IllegalArgumentException("이미 사용 중인 레퍼런스 에셋 key입니다.");
         }
 
-        String normalizedCutType = cutType.trim().toUpperCase();
+        GcsService.UploadedFile uploaded = gcsService.uploadReferenceAsset(file, normalizedAssetType);
 
-        if (!List.of("MODEL_CUT", "PRODUCT_CUT").contains(normalizedCutType)) {
-            throw new IllegalArgumentException("지원하지 않는 컷 유형입니다.");
+        try {
+            ReferenceAsset referenceAsset = ReferenceAsset.builder()
+                    .referenceType(normalizedAssetType)
+                    .referenceKey(normalizedKey)
+                    .name(normalizedLabel)
+                    .imageUrl(uploaded.fileUrl())
+                    .objectName(uploaded.objectName())
+                    .contentType(uploaded.contentType())
+                    .description(description)
+                    .active(true)
+                    .sortOrder(sortOrder == null ? 0 : sortOrder)
+                    .build();
+
+            return toReferenceAssetResponse(referenceAssetRepository.save(referenceAsset));
+
+        } catch (RuntimeException e) {
+            gcsService.deleteQuietly(uploaded.objectName());
+            throw e;
         }
-
-        return normalizedCutType;
     }
 
     private String normalizeAssetType(String assetType) {
@@ -138,30 +134,69 @@ public class ImageGenerationOptionService {
             return null;
         }
 
+        return normalizeRequiredAssetType(assetType);
+    }
+
+    private String normalizeRequiredAssetType(String assetType) {
+        if (assetType == null || assetType.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 유형을 입력해주세요.");
+        }
+
         String normalizedAssetType = assetType.trim().toUpperCase();
 
-        if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE").contains(normalizedAssetType)) {
+        if (!List.of("MODEL", "BACKGROUND", "POSE", "SHOT_REFERENCE", "SHOT_TEMPLATE").contains(normalizedAssetType)) {
             throw new IllegalArgumentException("지원하지 않는 레퍼런스 에셋 유형입니다.");
         }
 
         return normalizedAssetType;
     }
 
+    private String normalizeReferenceKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 key를 입력해주세요.");
+        }
+
+        return key.trim();
+    }
+
+    private String normalizeLabel(String label) {
+        if (label == null || label.isBlank()) {
+            throw new IllegalArgumentException("레퍼런스 에셋 이름을 입력해주세요.");
+        }
+
+        return label.trim();
+    }
+
     private OptionRespDto option(String key, String label, String description) {
         return new OptionRespDto(key, label, description);
     }
 
-    private ShotTemplateRespDto shot(String key, String label, String cutType, String promptText, String description) {
-        return new ShotTemplateRespDto(key, label, cutType, promptText, description);
+    private ShotTemplateRespDto toShotTemplateResponse(ReferenceAsset asset) {
+        return new ShotTemplateRespDto(
+                asset.getId(),
+                asset.getReferenceKey(),
+                asset.getName(),
+                asset.getDescription(),
+                getReferenceAssetImageUrl(asset)
+        );
     }
 
-    private ReferenceAssetRespDto referenceAsset(
-            String key,
-            String assetType,
-            String label,
-            String description,
-            String imageUrl
-    ) {
-        return new ReferenceAssetRespDto(key, assetType, label, description, imageUrl);
+    private ReferenceAssetRespDto toReferenceAssetResponse(ReferenceAsset referenceAsset) {
+        return new ReferenceAssetRespDto(
+                referenceAsset.getId(),
+                referenceAsset.getReferenceKey(),
+                referenceAsset.getReferenceType(),
+                referenceAsset.getName(),
+                referenceAsset.getDescription(),
+                getReferenceAssetImageUrl(referenceAsset)
+        );
+    }
+
+    private String getReferenceAssetImageUrl(ReferenceAsset referenceAsset) {
+        if (referenceAsset.getObjectName() == null || referenceAsset.getObjectName().isBlank()) {
+            return referenceAsset.getImageUrl();
+        }
+
+        return gcsService.generateSignedUrl(referenceAsset.getObjectName());
     }
 }
